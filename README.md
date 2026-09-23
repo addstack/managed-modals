@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.png" alt="managed-modals" width="100%">
+  <img src="https://raw.githubusercontent.com/addstack/managed-modals/main/assets/banner.png" alt="managed-modals" width="100%">
 </p>
 
 <p align="center">
@@ -10,7 +10,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@addstack/managed-modals"><img src="https://img.shields.io/npm/v/@addstack/managed-modals" alt="npm"></a>
   <a href="https://github.com/addstack/managed-modals/actions/workflows/ci.yml"><img src="https://github.com/addstack/managed-modals/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/npm/l/@addstack/managed-modals" alt="MIT license"></a>
+  <a href="https://github.com/addstack/managed-modals/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/@addstack/managed-modals" alt="MIT license"></a>
 </p>
 
 <p align="center">
@@ -18,7 +18,7 @@
   <a href="#-how-it-works">How it works</a> ·
   <a href="#-policies">Policies</a> ·
   <a href="#-guides">Guides</a> ·
-  <a href="docs/specification.md">Specification</a>
+  <a href="https://github.com/addstack/managed-modals/blob/main/docs/specification.md">Specification</a>
 </p>
 
 ---
@@ -138,7 +138,7 @@ Do the same in the other files you use:
 6. Closing a modal closes its nested modals.
 7. `priority` is reactive: changing it can reorder the queue or preempt without creating a new request.
 
-The exact model is described in the [specification](docs/specification.md).
+The exact model is described in the [specification](https://github.com/addstack/managed-modals/blob/main/docs/specification.md).
 
 ## 🚦 Policies
 
