@@ -1,25 +1,49 @@
-# managed-modals
+<p align="center">
+  <img src="assets/banner.png" alt="managed-modals" width="100%">
+</p>
 
-Priority scheduling for dialogs and drawers in React. Works with the Dialog and Drawer components you already have: shadcn/ui on Radix or Base UI, and vaul.
+<p align="center">
+  <b>Priority scheduling for dialogs and drawers in React.</b><br>
+  One modal on screen, a queue for the rest. Works with the shadcn/ui components you already have.
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/@addstack/managed-modals"><img src="https://img.shields.io/npm/v/@addstack/managed-modals" alt="npm"></a>
+  <a href="https://github.com/addstack/managed-modals/actions/workflows/ci.yml"><img src="https://github.com/addstack/managed-modals/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/npm/l/@addstack/managed-modals" alt="MIT license"></a>
+</p>
+
+<p align="center">
+  <a href="#-quick-start">Quick start</a> ·
+  <a href="#-how-it-works">How it works</a> ·
+  <a href="#-policies">Policies</a> ·
+  <a href="#-guides">Guides</a> ·
+  <a href="docs/specification.md">Specification</a>
+</p>
+
+---
 
 Apps pile up independent modals: session expired, billing problem, "new version available", onboarding, confirmations. Each one is correct on its own. Together they open over each other, fight over focus, and show onboarding on top of a payment form. `managed-modals` makes each modal a *request* and puts one scheduler in charge:
 
-- **One flow on screen.** Other modals wait in a priority queue.
-- **Preemption with resume.** A strictly higher priority takes over. The modal it replaces is hidden (with its state kept, where the primitive allows) and comes back afterwards.
-- **Nested flows.** A modal opened from inside another modal (e.g. "Really delete?" inside "Edit user") stacks on top of its parent, the way Radix and Base UI nest natively.
-- **Policies** per modal name: priority, what happens when preempted or blocked, maximum waiting time, deduplication.
-- **Optional serialized transitions.** With `awaitExit`, the next modal opens only after the previous one finished its exit animation.
-- **No dependency on any UI library.** The core is framework-agnostic. The React bindings wrap any root component that has `open` and `onOpenChange`.
+- 🎯 **One flow on screen.** Other modals wait in a priority queue.
+- ⏸️ **Preemption with resume.** A strictly higher priority takes over. The modal it replaces is hidden (with its state kept, where the primitive allows) and comes back afterwards.
+- 🪆 **Nested flows.** A modal opened from inside another modal (e.g. "Really delete?" inside "Edit user") stacks on top of its parent, the way Radix and Base UI nest natively.
+- 📋 **Policies** per modal name: priority, what happens when preempted or blocked, maximum waiting time, deduplication.
+- 🎬 **Optional serialized transitions.** With `awaitExit`, the next modal opens only after the previous one finished its exit animation.
+- 🧩 **No dependency on any UI library.** Radix, Base UI and vaul are supported through small adapters. The core is framework-agnostic.
+
+## 🚀 Quick start
+
+> [!TIP]
+> With shadcn/ui you only touch `lib/modals.ts` and the files in `components/ui`. Every `import { Dialog } from "@/components/ui/dialog"` in your app stays as it is.
+
+### 1. Install
 
 ```bash
 npm install @addstack/managed-modals
 ```
 
-The exact scheduling model is described in [docs/specification.md](docs/specification.md).
-
-## Quick start (shadcn/ui)
-
-Declare the policies once:
+### 2. Declare your modals and render the provider
 
 ```tsx
 // lib/modals.ts
@@ -37,15 +61,16 @@ export const { ModalProvider, managed } = createManagedModals({
 });
 ```
 
-Render the provider once:
-
 ```tsx
+// once, near the root of the app (e.g. app/layout.tsx)
 <ModalProvider>
   <App />
 </ModalProvider>
 ```
 
-Wrap the root in your `components/ui` files. Rename it and add one line:
+### 3. Wrap the root in `components/ui`
+
+Rename the root and add one line:
 
 ```diff
  // components/ui/dialog.tsx
@@ -59,9 +84,16 @@ Wrap the root in your `components/ui` files. Rename it and add one line:
 +const Dialog = managed(DialogRoot, { kind: "dialog", adapter: adapters.radix });
 ```
 
-Do the same for `AlertDialog` (`kind: "alert-dialog"`), `Sheet` (`"sheet"`) and `Drawer` (`"drawer"`). The adapter is `adapters.radix` for Radix, `adapters.baseUi` for Base UI and `adapters.vaul` for the vaul Drawer. Imports in the rest of the app stay the same.
+Do the same in the other files you use:
 
-Then give a `name` to each modal the scheduler should manage:
+| File               | Root          | `kind`           | `adapter`                                        |
+| ------------------ | ------------- | ---------------- | ------------------------------------------------ |
+| `dialog.tsx`       | `Dialog`      | `"dialog"`       | `adapters.radix` (Radix) or `adapters.baseUi` (Base UI) |
+| `alert-dialog.tsx` | `AlertDialog` | `"alert-dialog"` | `adapters.radix` or `adapters.baseUi`            |
+| `sheet.tsx`        | `Sheet`       | `"sheet"`        | `adapters.radix` or `adapters.baseUi`            |
+| `drawer.tsx`       | `Drawer`      | `"drawer"`       | `adapters.vaul` (vaul) or `adapters.baseUi` (Base UI) |
+
+### 4. Name the modals the scheduler should manage
 
 ```tsx
 <Dialog name="billing-problem" open={hasBillingProblem} onOpenChange={setHasBillingProblem}>
@@ -71,22 +103,26 @@ Then give a `name` to each modal the scheduler should manage:
 </Dialog>
 ```
 
-`name` is typed from `policies`, so a typo is a compile error. Controlled (`open`/`onOpenChange`) and uncontrolled (`defaultOpen`, `DialogTrigger`) usage both work.
+✅ **That's it.** `name` is typed from `policies`, so a typo is a compile error. Controlled (`open`/`onOpenChange`) and uncontrolled (`defaultOpen`, `DialogTrigger`) usage both work.
 
-A dialog **without a `name`** is left alone:
+> [!NOTE]
+> A dialog **without a `name`** is left alone:
+>
+> - On its own, it is the plain primitive. It is not scheduled, so a managed modal can open on top of it.
+> - Inside a managed modal, it joins that modal's flow: it opens on top of it, and it is hidden and brought back with it.
+> - Outside `<ModalProvider>` (Storybook, component tests), every dialog is the plain primitive. A named one logs a warning.
 
-- On its own, it is the plain primitive. It is not scheduled, so a managed modal can open on top of it.
-- Inside a managed modal, it joins that modal's flow: it opens on top of it, and it is hidden and brought back with it.
-- Outside `<ModalProvider>` (Storybook, component tests), every dialog is the plain primitive. A named one logs a warning.
+> [!IMPORTANT]
+> `open` now means **intent**: "this modal wants to be open". The scheduler decides when it is actually shown.
+>
+> - A modal that is queued or suspended keeps `open === true` in your state. `onOpenChange(false)` is **not** called when the scheduler hides it.
+> - `onOpenChange(false)` is called when the user closes the modal, or when the scheduler **dismisses** it for good (see `onPreempt`, `whenBlocked`, `maxWaitMs`, `unique`). `onDismiss(reason)` is called right before, so you can tell the two apart.
 
-### What `open` means now
+**Next steps:** keep a preempted modal's form state with [a few lines in `DialogContent`](#-keeping-a-suspended-modals-state), or serialize exit animations with [`awaitExit`](#-waiting-for-exit-animations-awaitexit).
 
-`open` is **intent**: "this modal wants to be open". The scheduler decides when it is actually shown.
+---
 
-- A modal that is queued or suspended keeps `open === true` in your state. `onOpenChange(false)` is **not** called when the scheduler hides it.
-- `onOpenChange(false)` is called when the user closes the modal, or when the scheduler **dismisses** it for good (see `onPreempt`, `whenBlocked`, `maxWaitMs`, `unique`). `onDismiss(reason)` is called right before, so you can tell the two apart.
-
-## Scheduling rules
+## 🧠 How it works
 
 1. With nothing on screen, the best waiting modal is shown.
 2. Only a **strictly higher** priority takes over the screen. Equal or lower priority waits, so equal priorities never thrash.
@@ -97,12 +133,14 @@ A dialog **without a `name`** is left alone:
    4. first come, first served.
 
    Ordering uses a logical clock, never timestamps.
-4. A modal rendered inside another managed modal is **nested**. It opens on top right away, whatever its own priority, and its effective priority is at least its parent's. The parent stays open underneath, which is the native nesting behaviour of Radix, Base UI and vaul.
+4. A modal rendered inside another managed modal is **nested**, with or without its own `name`. It opens on top right away, whatever its own priority, and its effective priority is at least its parent's. The parent stays open underneath, which is the native nesting behaviour of Radix, Base UI and vaul.
 5. Preempting a nested flow hides the whole flow. The flow resumes where it was, with the child on top.
 6. Closing a modal closes its nested modals.
 7. `priority` is reactive: changing it can reorder the queue or preempt without creating a new request.
 
-## Policies
+The exact model is described in the [specification](docs/specification.md).
+
+## 🚦 Policies
 
 | Field         | Default     | Meaning                                                                                 |
 | ------------- | ----------- | --------------------------------------------------------------------------------------- |
@@ -114,11 +152,13 @@ A dialog **without a `name`** is left alone:
 
 An instance can override the policy with `priority={95}` (reactive) or `policy={{ onPreempt: "dismiss" }}`.
 
-## Keeping a suspended modal's state
+## 📚 Guides
 
-When a modal is preempted, its content must stay mounted to keep form state and scroll position. The primitives support this at the *content* level, so add a few lines to your `components/ui/*.tsx`. `useModalPresentation()` returns `null` outside a managed modal, so the same component keeps working for unmanaged dialogs.
+### 💾 Keeping a suspended modal's state
 
-### Base UI (shadcn `dialog.tsx`)
+When a modal is preempted, its content must stay mounted to keep form state and scroll position. The primitives support this at the *content* level, so add a few lines to the content component in the same `components/ui/*.tsx` file as the root. `useModalPresentation()` returns `null` outside a managed modal, so the same component keeps working for unmanaged dialogs.
+
+#### Base UI (shadcn `dialog.tsx`)
 
 ```tsx
 import { useModalPresentation } from "@addstack/managed-modals/react";
@@ -143,7 +183,7 @@ function DialogContent({ className, children, ...props }: DialogPrimitive.Popup.
 
 The same applies to Base UI `AlertDialog` and `Drawer`.
 
-### Radix (shadcn `dialog.tsx`, also `sheet.tsx` and `alert-dialog.tsx`)
+#### Radix (shadcn `dialog.tsx`, also `sheet.tsx` and `alert-dialog.tsx`)
 
 ```tsx
 import { useFocusOnResume, useModalPresentation } from "@addstack/managed-modals/react";
@@ -176,11 +216,13 @@ function DialogContent({ className, children, onCloseAutoFocus, ...props }: Reac
 }
 ```
 
-On Tailwind v4 the preflight hides `[hidden]` even on `grid`/`flex` elements. On Tailwind v3, also add the `hidden` class while `suspended`.
+> [!WARNING]
+> On Tailwind v4 the preflight hides `[hidden]` even on `grid`/`flex` elements. On Tailwind v3, also add the `hidden` class while `suspended`.
 
-Without these changes everything still works. A suspended modal just unmounts its content, and local state is lost unless you lift it.
+> [!TIP]
+> Without these changes everything still works. A suspended modal just unmounts its content, and local state is lost unless you lift it.
 
-## Waiting for exit animations (`awaitExit`)
+### 🎬 Waiting for exit animations (`awaitExit`)
 
 ```ts
 createManagedModals({ policies, awaitExit: true, exitTimeoutMs: 300 });
@@ -190,11 +232,14 @@ With `awaitExit`, a modal that leaves the screen must finish its exit animation 
 
 - `adapters.baseUi` uses `onOpenChangeComplete` (Base UI Dialog, AlertDialog, Drawer);
 - `adapters.vaul` uses `onAnimationEnd`;
-- Radix has no such callback, so `exitTimeoutMs` is used. Set it to your animation duration (shadcn uses 200ms).
+- Radix has no such callback, so `exitTimeoutMs` is used.
+
+> [!NOTE]
+> With Radix, set `exitTimeoutMs` to your animation duration (shadcn uses 200ms).
 
 `exitTimeoutMs` (default 1000) is also the fallback if a report never arrives. For custom primitives, call `onExitComplete()` from `useManagedModalContext()`.
 
-## Custom primitives: `useManagedModal`
+### 🧩 Custom primitives: `useManagedModal`
 
 `managed()` is a thin wrapper over a hook you can use directly:
 
@@ -213,7 +258,7 @@ function MyModal({ open, onClose }: { open: boolean; onClose: () => void }) {
 
 `modal.presentation` is `{ status, open, keepMounted, suppressFinalFocus, dismissReason? }`. `status` is one of `idle`, `pending`, `active`, `covered` (on screen under a nested child), `suspended` or `dismissed`.
 
-## Core (no React)
+### 🔧 Core (no React)
 
 ```ts
 import { createModalManager, getDebugSnapshot } from "@addstack/managed-modals";
@@ -229,7 +274,7 @@ store.cancel("r1");
 
 The scheduler itself is a pure reducer (`modalSchedulerReducer`) with actions `request`, `cancel`, `update-priority` and `exit-complete`. `store.subscribe`/`store.getSnapshot` match React's `useSyncExternalStore`, and `store.getPresentation(id)` is referentially stable while nothing relevant changes.
 
-## Debugging
+### 🐞 Debugging
 
 ```tsx
 const { useModalSchedulerState } = createManagedModals({ policies });
@@ -240,13 +285,13 @@ function ModalDebugger() {
 }
 ```
 
-## Notes
+## 📝 Notes
 
-- **SSR / RSC.** The React entry is marked `"use client"`. Managed modals render closed on the server and open after hydration.
+- **SSR / RSC.** The React entry is marked `"use client"`, and so should be `lib/modals.ts`: `createManagedModals()` runs on the client. Managed modals render closed on the server and open after hydration.
 - **Strict Mode.** Double-invoked effects are handled. A nested modal may register before its parent (React runs child effects first); it waits for the parent instead of failing.
 - **Focus.** Base UI moves focus back into a resumed dialog by itself. For Radix, use `useFocusOnResume` as shown above: it restores the element that had focus before the suspension.
 - **Tested with** React 18.3 and 19.3, `@radix-ui/react-dialog` 1.1, `@base-ui/react` 1.8 and vaul 1.1, in jsdom, and in Chromium, Firefox and WebKit with Playwright for focus, keyboard, pointer and exit animations.
 
-## License
+## 📄 License
 
 MIT
