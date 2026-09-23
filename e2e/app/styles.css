@@ -1,0 +1,144 @@
+:root {
+  --duration: 300ms;
+  font-family: system-ui, sans-serif;
+  color: #111;
+  background: #fff;
+}
+
+/* Like the Tailwind v4 preflight: `hidden` wins over display utilities. */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  padding: 24px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Makes the page scrollable, to check that no scroll lock is left behind. */
+.spacer {
+  height: 300vh;
+}
+
+.overlay,
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.4);
+}
+
+.popup {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: min(420px, calc(100vw - 32px));
+  transform: translate(-50%, -50%);
+  display: grid;
+  gap: 12px;
+  padding: 24px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.25);
+}
+
+.drawer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  gap: 12px;
+  padding: 24px;
+  border-radius: 12px 12px 0 0;
+  background: #fff;
+}
+
+.popup h2,
+.drawer h2 {
+  margin: 0;
+}
+
+label {
+  display: grid;
+  gap: 4px;
+}
+
+/* Radix (shadcn with tw-animate-css): keyframes keyed on data-state. Presence waits for the exit animation. */
+.popup[data-state="open"] {
+  animation: popup-in var(--duration) ease-out;
+}
+.popup[data-state="closed"] {
+  animation: popup-out var(--duration) ease-in forwards;
+}
+.overlay[data-state="open"] {
+  animation: fade-in var(--duration) ease-out;
+}
+.overlay[data-state="closed"] {
+  animation: fade-out var(--duration) ease-in forwards;
+}
+
+/* Base UI: transitions from and to data-starting-style / data-ending-style. vaul brings its own styles. */
+.popup[data-open],
+.popup[data-closed] {
+  transition:
+    opacity var(--duration),
+    transform var(--duration);
+}
+.popup[data-starting-style],
+.popup[data-ending-style] {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.95);
+}
+.overlay[data-open],
+.overlay[data-closed],
+.drawer-overlay[data-open],
+.drawer-overlay[data-closed] {
+  transition: opacity var(--duration);
+}
+.overlay[data-starting-style],
+.overlay[data-ending-style],
+.drawer-overlay[data-starting-style],
+.drawer-overlay[data-ending-style] {
+  opacity: 0;
+}
+.drawer[data-open],
+.drawer[data-closed] {
+  transition: transform var(--duration);
+}
+.drawer[data-starting-style],
+.drawer[data-ending-style] {
+  transform: translateY(100%);
+}
+
+@keyframes popup-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.95);
+  }
+}
+@keyframes popup-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.95);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "name": "@addstack/managed-modals",
+  "version": "0.0.0-semantically-released",
+  "description": "Priority scheduling for dialogs and drawers in React (shadcn/ui, Radix, Base UI, vaul): one modal flow on screen, a queue for the rest, preemption with resume, nested flows.",
+  "keywords": [
+    "react",
+    "modal",
+    "dialog",
+    "drawer",
+    "sheet",
+    "shadcn",
+    "shadcn-ui",
+    "radix-ui",
+    "base-ui",
+    "vaul",
+    "priority",
+    "queue",
+    "scheduler"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/addstack/managed-modals.git"
+  },
+  "homepage": "https://github.com/addstack/managed-modals#readme",
+  "bugs": {
+    "url": "https://github.com/addstack/managed-modals/issues"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/core/index.d.ts",
+      "default": "./dist/core/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "default": "./dist/react/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p e2e/tsconfig.json",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "check:package": "npx --yes publint && npx --yes @arethetypeswrong/cli --pack . --profile esm-only",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@base-ui/react": "^1.8.0",
+    "@playwright/test": "^1.63.0",
+    "@radix-ui/react-dialog": "^1.1.23",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^24.13.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "jsdom": "^30.1.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "semantic-release": "^25.0.9",
+    "typescript": "^7.0.2",
+    "vaul": "^1.1.2",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1"
+  }
+}
