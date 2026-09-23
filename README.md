@@ -15,6 +15,7 @@
 
 <p align="center">
   <a href="#-quick-start">Quick start</a> ·
+  <a href="https://addstack.github.io/managed-modals/">Playground</a> ·
   <a href="#-how-it-works">How it works</a> ·
   <a href="#-policies">Policies</a> ·
   <a href="#-guides">Guides</a> ·
@@ -22,6 +23,16 @@
 </p>
 
 ---
+
+<p align="center">
+  <a href="https://addstack.github.io/managed-modals/">
+    <img src="https://raw.githubusercontent.com/addstack/managed-modals/main/assets/demo.gif" alt="A session-expired dialog takes over an edit form; after signing in the form comes back as it was, then a queued dialog opens" width="100%">
+  </a>
+</p>
+
+<p align="center">
+  🎮 <a href="https://addstack.github.io/managed-modals/"><b>Try it in the playground</b></a>: fire events, watch the queue, and switch the scheduler off to see the mess it prevents.
+</p>
 
 Apps pile up independent modals: session expired, billing problem, "new version available", onboarding, confirmations. Each one is correct on its own. Together they open over each other, fight over focus, and show onboarding on top of a payment form. `managed-modals` makes each modal a *request* and puts one scheduler in charge:
 
@@ -290,6 +301,7 @@ function ModalDebugger() {
 - **SSR / RSC.** The React entry is marked `"use client"`, and so should be `lib/modals.ts`: `createManagedModals()` runs on the client. Managed modals render closed on the server and open after hydration.
 - **Strict Mode.** Double-invoked effects are handled. A nested modal may register before its parent (React runs child effects first); it waits for the parent instead of failing.
 - **Focus.** Base UI moves focus back into a resumed dialog by itself. For Radix, use `useFocusOnResume` as shown above: it restores the element that had focus before the suspension.
+- **Playground.** `npm run playground` runs the [playground](https://addstack.github.io/managed-modals/) against your local `src/`.
 - **Tested with** React 18.3 and 19.3, `@radix-ui/react-dialog` 1.1, `@base-ui/react` 1.8 and vaul 1.1, in jsdom, and in Chromium, Firefox and WebKit with Playwright for focus, keyboard, pointer and exit animations.
 
 ## 📄 License
