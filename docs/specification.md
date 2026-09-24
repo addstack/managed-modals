@@ -279,7 +279,8 @@ The store completes any exit that is not reported within `exitTimeoutMs` (defaul
 | Member | Purpose |
 | --- | --- |
 | `ModalProvider` | Creates one store (or uses `store` prop) and provides it. Render once near the root. |
-| `managed(Root, { kind, adapter?, displayName? })` | Wraps any root component with `open`/`onOpenChange` ([§10.4](#104-managed-roots)). Meant for the root in the application's own `components/ui` files, so that call sites keep their imports. |
+| `managed(parts, { kind, adapter?, displayName? })` | Wraps a primitive's parts, as its library exports them (`radix-ui`'s `Dialog`, Base UI's `Dialog`, vaul's `Drawer`, …) ([§10.5](#105-managed-parts)). Meant for the import of the application's own `components/ui` files, so that neither those files nor call sites change otherwise. |
+| `managed(Root, { kind, adapter?, displayName? })` | Wraps any root component with `open`/`onOpenChange` ([§10.4](#104-managed-roots)). |
 | `useManagedModal(options)` | Low-level hook ([§10.3](#103-registration)). |
 | `useModalSchedulerState()` | Current state for debugging UIs. |
 | `manager` | The core manager (policies, `resolvePolicy`, `createStore`). |
@@ -328,6 +329,18 @@ Which roots are scheduled:
 
 Switching a root between scheduled and not scheduled remounts the primitive.
 
+### 10.5 Managed parts
+
+`managed(parts, options)` returns a copy of `parts` in which:
+
+- `Root` is `managed(parts.Root, options)` ([§10.4](#104-managed-roots));
+- `Portal`, if there is one, renders `parts.Portal` with the same props inside a `<ModalActivity>` ([§11.2](#112-content-integration));
+- every other member is the same value as in `parts`.
+
+`managed()` tells the two forms apart at run time: a non-null object without `$$typeof` (so not a `memo`, `forwardRef` or `lazy` component) and with a `Root` member is a parts object; anything else is a root component. The type of the result keeps every member's type, except `Root`, which accepts the managed props.
+
+Only the `Root` and `Portal` members are replaced, not aliases of them (`@radix-ui/react-dialog` also exports `Dialog` and `DialogPortal`).
+
 A scheduled root receives `open = rootOpen` and a guarded `onOpenChange`. `rootOpen` is `presentation.open`, except that it stays `true` while the modal is `suspended` and a `<ModalActivity>` is registered in its content ([§11.2](#112-content-integration)).
 
 - `next === intent` is ignored. For example, a trigger pressed while the modal is queued.
@@ -340,7 +353,7 @@ Contract towards the application:
 - On dismissal, `onDismiss(reason)` is called, then `onOpenChange(false)` (uncontrolled intent is also set to false).
 - Every scheduled root provides `ManagedModalContext` (`{ requestId, name, kind, presentation, onExitComplete, registerActivity }`) to its subtree. It passes through portals.
 
-### 10.5 SSR and RSC
+### 10.6 SSR and RSC
 
 Every React module starts with `"use client"`. On the server, `useSyncExternalStore` returns `IDLE_PRESENTATION`, so managed modals render closed and open after hydration.
 
@@ -364,7 +377,7 @@ The returned props are merged over the user's props, before `open` and `onOpenCh
 
 ### 11.2 Content integration
 
-Keeping a suspended modal's content alive has to happen at the content level: wrapping the whole root would also hide its trigger, which lives on the page. `<ModalActivity>` wraps the content's portal and renders React's `<Activity>` around it:
+Keeping a suspended modal's content alive has to happen at the content level: wrapping the whole root would also hide its trigger, which lives on the page. `<ModalActivity>` wraps the content's portal and renders React's `<Activity>` around it. Managed parts put it around their `Portal` ([§10.5](#105-managed-parts)); with a managed root alone, the application places it:
 
 1. **Registration.** In a layout effect it registers with the nearest managed modal (`registerActivity(id)`, unregistered on cleanup). While at least one boundary is registered, the root keeps the primitive open while the modal is `suspended` ([§10.4](#104-managed-roots)).
 2. **Hiding.** Its mode is `hidden` while the modal is `suspended` or `pending` (queued, including entry-blocked before it was ever shown). Hiding queued content matters for content that renders while its root is closed (`forceMount`, Base UI `keepMounted`, animation libraries driven by the application's `open`). React then hides the content, portals included, with `display: none`, and cleans up its effects: the primitive's focus trap, scroll lock, dismissable layer and `aria-hidden` on the page go away, while state and DOM are kept. When the modal is on screen again, the mode is `visible` and the effects come back, as on open.

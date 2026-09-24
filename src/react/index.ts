@@ -13,10 +13,13 @@ export {
   type ModalProviderProps,
 } from "./create-managed-modals.js";
 export {
+  createManagedPrimitive,
   createManagedRoot,
   type ManagedOptions,
+  type ManagedPrimitive,
   type ManagedRootOwnProps,
   type ManagedRootProps,
+  type PrimitiveParts,
 } from "./managed.js";
 export { ModalActivity } from "./modal-activity.js";
 export {

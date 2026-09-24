@@ -13,7 +13,15 @@ import {
 } from "../core/index.js";
 import { ModalStoreContext, useModalStore } from "./context.js";
 import { rememberScrollPositions } from "./scroll-positions.js";
-import { createManagedRoot, type ManagedOptions, type ManagedRootProps } from "./managed.js";
+import {
+  createManagedPrimitive,
+  createManagedRoot,
+  isPrimitiveParts,
+  type ManagedOptions,
+  type ManagedPrimitive,
+  type ManagedRootProps,
+  type PrimitiveParts,
+} from "./managed.js";
 import { useManagedModal, type UseManagedModalOptions, type UseManagedModalResult } from "./use-managed-modal.js";
 
 export type ModalProviderProps<Name extends string> = {
@@ -34,6 +42,15 @@ export type ManagedModals<Policies extends ModalPolicies> = {
     Root: ComponentType<P>,
     options: ManagedOptions,
   ): ComponentType<ManagedRootProps<P, ModalName<Policies>>>;
+  /**
+   * Wraps a primitive's parts (e.g. `import { Dialog } from "radix-ui"`):
+   * `Root` becomes managed and `Portal` keeps suspended content alive with
+   * `<ModalActivity>`. Every other part is left as it is.
+   */
+  managed<Parts extends PrimitiveParts>(
+    parts: Parts,
+    options: ManagedOptions,
+  ): ManagedPrimitive<Parts, ModalName<Policies>>;
   useManagedModal(options: UseManagedModalOptions<ModalName<Policies>>): UseManagedModalResult;
   /** Current scheduler state (for debugging UIs). */
   useModalSchedulerState(): ModalSchedulerState<ModalName<Policies>>;
@@ -46,7 +63,8 @@ export type ManagedModals<Policies extends ModalPolicies> = {
  * export const { ModalProvider, managed } = createManagedModals({
  *   policies: { "session-expired": { priority: 100 }, onboarding: { priority: 10 } },
  * })
- * export const Dialog = managed(ShadcnDialog, { kind: "dialog", adapter: adapters.radix })
+ * // components/ui/dialog.tsx
+ * const DialogPrimitive = managed(RadixDialog, { kind: "dialog", adapter: adapters.radix })
  * ```
  */
 export function createManagedModals<const Policies extends ModalPolicies>(
@@ -72,7 +90,10 @@ export function createManagedModals<const Policies extends ModalPolicies>(
   return {
     manager,
     ModalProvider,
-    managed: (Root, options) => createManagedRoot(Root, options),
+    managed: ((target: ComponentType<object> | PrimitiveParts, options: ManagedOptions) =>
+      isPrimitiveParts(target)
+        ? createManagedPrimitive(target, options)
+        : createManagedRoot(target, options)) as ManagedModals<Policies>["managed"],
     useManagedModal,
     useModalSchedulerState,
   };

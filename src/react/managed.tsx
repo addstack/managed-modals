@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useContext, useRef, useState, type ComponentType } from "react";
+import { useCallback, useContext, useRef, useState, type ComponentProps, type ComponentType } from "react";
 
 import type { ModalDismissReason, ModalKind, ModalPolicyOverrides } from "../core/index.js";
 import type { ModalAdapter } from "./adapters.js";
 import { ManagedModalContext, ModalStoreContext } from "./context.js";
+import { ModalActivity } from "./modal-activity.js";
 import { useIsomorphicLayoutEffect, useManagedModal } from "./use-managed-modal.js";
 
 type OpenChangeRest<P> = P extends { onOpenChange?: infer Handler }
@@ -159,4 +160,44 @@ export function createManagedRoot<P extends object, Name extends string = string
     options.displayName ?? `Managed(${Root.displayName ?? (Root.name || "Root")})`;
 
   return ManagedRoot;
+}
+
+/**
+ * A primitive's parts, as its library exports them: `@radix-ui/react-dialog`
+ * (or `radix-ui`'s `Dialog`), Base UI's `Dialog`, vaul's `Drawer`, and so on.
+ */
+// `any`: parts have unrelated prop types.
+export type PrimitiveParts = { Root: ComponentType<any>; Portal?: ComponentType<any> };
+
+/** The parts with a managed `Root`, and a `Portal` that keeps suspended content alive. */
+export type ManagedPrimitive<Parts extends PrimitiveParts, Name extends string> = {
+  [Key in keyof Parts]: Key extends "Root" ? ComponentType<ManagedRootProps<ComponentProps<Parts["Root"]>, Name>> : Parts[Key];
+};
+
+/** A parts object, as opposed to a root component (a function, or a memo/forwardRef object). */
+export function isPrimitiveParts(value: unknown): value is PrimitiveParts {
+  return typeof value === "object" && value !== null && !("$$typeof" in value) && "Root" in value;
+}
+
+/**
+ * Wraps a primitive's parts: `Root` becomes managed, and `Portal` renders in a
+ * `<ModalActivity>`, so content keeps its state while another modal takes
+ * over. Every other part is the library's own.
+ */
+export function createManagedPrimitive<Parts extends PrimitiveParts, Name extends string = string>(
+  parts: Parts,
+  options: ManagedOptions,
+): ManagedPrimitive<Parts, Name> {
+  const managedParts: Record<string, unknown> = { ...parts, Root: createManagedRoot(parts.Root, options) };
+  if (parts.Portal) {
+    const Portal = parts.Portal;
+    const ActivityPortal = (props: Record<string, unknown>) => (
+      <ModalActivity>
+        <Portal {...props} />
+      </ModalActivity>
+    );
+    ActivityPortal.displayName = `Managed(${Portal.displayName ?? (Portal.name || "Portal")})`;
+    managedParts.Portal = ActivityPortal;
+  }
+  return managedParts as ManagedPrimitive<Parts, Name>;
 }

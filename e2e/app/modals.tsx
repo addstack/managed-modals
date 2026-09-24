@@ -1,11 +1,11 @@
-import { Dialog as BaseDialog } from "@base-ui/react/dialog";
-import { Drawer as BaseDrawer } from "@base-ui/react/drawer";
-import * as RadixDialog from "@radix-ui/react-dialog";
-import { useRef, type ComponentProps, type ReactNode } from "react";
-import { Drawer as VaulDrawer } from "vaul";
+import { Dialog as BaseDialogPrimitive } from "@base-ui/react/dialog";
+import { Drawer as BaseDrawerPrimitive } from "@base-ui/react/drawer";
+import * as RadixDialogPrimitive from "@radix-ui/react-dialog";
+import { useRef, type ReactNode } from "react";
+import { Drawer as VaulDrawerPrimitive } from "vaul";
 
 import type { ModalDismissReason, ModalName as PolicyName } from "../../src/core/index.js";
-import { adapters, createManagedModals, ModalActivity, usePauseWhileSuspended } from "../../src/react/index.js";
+import { adapters, createManagedModals, usePauseWhileSuspended } from "../../src/react/index.js";
 import { fromSearch } from "./options.js";
 
 export const options = fromSearch(window.location.search);
@@ -40,128 +40,117 @@ export type ModalProps = {
   onOpenChange: (open: boolean) => void;
   onDismiss: (reason: ModalDismissReason) => void;
   /** Base UI only: associates detached `Dialog.Trigger`s rendered elsewhere. */
-  handle?: BaseDialog.Handle<unknown>;
+  handle?: BaseDialogPrimitive.Handle<unknown>;
   children?: ReactNode;
 };
 
 type ContentProps = { title: string; children?: ReactNode };
 
+// Every primitive is integrated as the README shows it for the shadcn/ui files:
+// its parts are wrapped with managed(), and the components built on them are unchanged.
+
 // --- Radix Dialog -----------------------------------------------------------
 
-const RadixRoot = modals.managed(RadixDialog.Root, { kind: "dialog", adapter: adapters.radix });
+const RadixDialog = modals.managed(RadixDialogPrimitive, { kind: "dialog", adapter: adapters.radix });
 
 export function RadixModal({ title, trigger, children, handle: _handle, ...root }: ModalProps) {
   return (
-    <RadixRoot {...root}>
+    <RadixDialog.Root {...root}>
       {trigger !== undefined && <RadixDialog.Trigger>{trigger}</RadixDialog.Trigger>}
       <RadixContent title={title}>{children}</RadixContent>
-    </RadixRoot>
+    </RadixDialog.Root>
   );
 }
 
-/** shadcn/ui `DialogContent` on Radix, with the one-line `<ModalActivity>` integration from the README. */
+/** shadcn/ui `DialogContent` on Radix. */
 function RadixContent({ title, children }: ContentProps) {
   return (
-    <ModalActivity>
-      <RadixDialog.Portal>
-        <RadixDialog.Overlay className="overlay" />
-        <RadixDialog.Content className="popup" aria-describedby={undefined}>
-          <RadixDialog.Title>{title}</RadixDialog.Title>
-          {children}
-          <RadixDialog.Close>Close</RadixDialog.Close>
-        </RadixDialog.Content>
-      </RadixDialog.Portal>
-    </ModalActivity>
+    <RadixDialog.Portal>
+      <RadixDialog.Overlay className="overlay" />
+      <RadixDialog.Content className="popup" aria-describedby={undefined}>
+        <RadixDialog.Title>{title}</RadixDialog.Title>
+        {children}
+        <RadixDialog.Close>Close</RadixDialog.Close>
+      </RadixDialog.Content>
+    </RadixDialog.Portal>
   );
 }
 
 // --- Base UI Dialog ---------------------------------------------------------
 
-const BaseRoot = modals.managed(
-  (props: ComponentProps<typeof BaseDialog.Root>) => <BaseDialog.Root {...props} />,
-  { kind: "dialog", adapter: adapters.baseUi },
-);
+const BaseDialog = modals.managed(BaseDialogPrimitive, { kind: "dialog", adapter: adapters.baseUi });
 
 export function BaseModal({ title, trigger, children, ...root }: ModalProps) {
   return (
-    <BaseRoot {...root}>
+    <BaseDialog.Root {...root}>
       {trigger !== undefined && <BaseDialog.Trigger>{trigger}</BaseDialog.Trigger>}
       <BaseContent title={title}>{children}</BaseContent>
-    </BaseRoot>
+    </BaseDialog.Root>
   );
 }
 
-/** shadcn/ui `DialogContent` on Base UI, with the one-line `<ModalActivity>` integration from the README. */
+/** shadcn/ui `DialogContent` on Base UI. */
 function BaseContent({ title, children }: ContentProps) {
   return (
-    <ModalActivity>
-      <BaseDialog.Portal>
-        <BaseDialog.Backdrop className="overlay" />
-        <BaseDialog.Popup className="popup">
-          <BaseDialog.Title>{title}</BaseDialog.Title>
-          {children}
-          <BaseDialog.Close>Close</BaseDialog.Close>
-        </BaseDialog.Popup>
-      </BaseDialog.Portal>
-    </ModalActivity>
+    <BaseDialog.Portal>
+      <BaseDialog.Backdrop className="overlay" />
+      <BaseDialog.Popup className="popup">
+        <BaseDialog.Title>{title}</BaseDialog.Title>
+        {children}
+        <BaseDialog.Close>Close</BaseDialog.Close>
+      </BaseDialog.Popup>
+    </BaseDialog.Portal>
   );
 }
 
 // --- vaul Drawer ------------------------------------------------------------
 
-const VaulRoot = modals.managed(VaulDrawer.Root, { kind: "drawer", adapter: adapters.vaul });
+const VaulDrawer = modals.managed(VaulDrawerPrimitive, { kind: "drawer", adapter: adapters.vaul });
 
-/** shadcn/ui `Drawer` (vaul), with the one-line `<ModalActivity>` integration. */
+/** shadcn/ui `Drawer` (vaul). */
 export function VaulModal({ title, trigger, children, handle: _handle, ...root }: ModalProps) {
   return (
-    <VaulRoot {...root}>
+    <VaulDrawer.Root {...root}>
       {trigger !== undefined && <VaulDrawer.Trigger>{trigger}</VaulDrawer.Trigger>}
-      <ModalActivity>
-        <VaulDrawer.Portal>
-          <VaulDrawer.Overlay className="drawer-overlay" />
-          <VaulDrawer.Content className="drawer" aria-describedby={undefined}>
-            <VaulDrawer.Title>{title}</VaulDrawer.Title>
-            {children}
-            <VaulDrawer.Close>Close</VaulDrawer.Close>
-          </VaulDrawer.Content>
-        </VaulDrawer.Portal>
-      </ModalActivity>
-    </VaulRoot>
+      <VaulDrawer.Portal>
+        <VaulDrawer.Overlay className="drawer-overlay" />
+        <VaulDrawer.Content className="drawer" aria-describedby={undefined}>
+          <VaulDrawer.Title>{title}</VaulDrawer.Title>
+          {children}
+          <VaulDrawer.Close>Close</VaulDrawer.Close>
+        </VaulDrawer.Content>
+      </VaulDrawer.Portal>
+    </VaulDrawer.Root>
   );
 }
 
 // --- Base UI Drawer ---------------------------------------------------------
 
-const BaseDrawerRoot = modals.managed(
-  (props: ComponentProps<typeof BaseDrawer.Root>) => <BaseDrawer.Root {...props} />,
-  { kind: "drawer", adapter: adapters.baseUi },
-);
+const BaseDrawer = modals.managed(BaseDrawerPrimitive, { kind: "drawer", adapter: adapters.baseUi });
 
 export function BaseDrawerModal({ title, trigger, children, handle: _handle, ...root }: ModalProps) {
   return (
-    <BaseDrawerRoot {...root}>
+    <BaseDrawer.Root {...root}>
       {trigger !== undefined && <BaseDrawer.Trigger>{trigger}</BaseDrawer.Trigger>}
       <BaseDrawerContent title={title}>{children}</BaseDrawerContent>
-    </BaseDrawerRoot>
+    </BaseDrawer.Root>
   );
 }
 
 function BaseDrawerContent({ title, children }: ContentProps) {
   return (
-    <ModalActivity>
-      <BaseDrawer.Portal>
-        <BaseDrawer.Backdrop className="drawer-overlay" />
-        <BaseDrawer.Viewport>
-          <BaseDrawer.Popup className="drawer">
-            <BaseDrawer.Content>
-              <BaseDrawer.Title>{title}</BaseDrawer.Title>
-              {children}
-              <BaseDrawer.Close>Close</BaseDrawer.Close>
-            </BaseDrawer.Content>
-          </BaseDrawer.Popup>
-        </BaseDrawer.Viewport>
-      </BaseDrawer.Portal>
-    </ModalActivity>
+    <BaseDrawer.Portal>
+      <BaseDrawer.Backdrop className="drawer-overlay" />
+      <BaseDrawer.Viewport>
+        <BaseDrawer.Popup className="drawer">
+          <BaseDrawer.Content>
+            <BaseDrawer.Title>{title}</BaseDrawer.Title>
+            {children}
+            <BaseDrawer.Close>Close</BaseDrawer.Close>
+          </BaseDrawer.Content>
+        </BaseDrawer.Popup>
+      </BaseDrawer.Viewport>
+    </BaseDrawer.Portal>
   );
 }
 

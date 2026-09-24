@@ -81,43 +81,65 @@ export const { ModalProvider, managed } = createManagedModals({
 </ModalProvider>
 ```
 
-### 3. Wrap the root and the content in `components/ui`
+### 3. Wrap the primitive in `components/ui`
 
-Two small changes in the same file. The root becomes managed; the content keeps its state while another modal takes over:
+One change per file: wrap what the file imports from the primitive library. The rest of the file stays as it is.
 
 ```diff
  // components/ui/dialog.tsx
-+import { adapters, ModalActivity } from "@addstack/managed-modals/react";
-+import { managed } from "@/lib/modals";
+-import { Dialog as DialogPrimitive } from "radix-ui"
++import { Dialog as RadixDialog } from "radix-ui"
++import { adapters } from "@addstack/managed-modals/react"
++import { managed } from "@/lib/modals"
++
++const DialogPrimitive = managed(RadixDialog, { kind: "dialog", adapter: adapters.radix })
+```
 
--function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
-+function DialogRoot({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
-   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
+`managed()` replaces two parts, and leaves every other one as the library's own:
+
+- `Root` becomes managed, so `Dialog` takes a `name`;
+- `Portal` keeps the content alive while another modal takes over: form fields, scroll positions and a playing video are still there when the dialog comes back.
+
+Do the same in the other files you use:
+
+| File               | Wrap                                          | `kind`           | `adapter`        |
+| ------------------ | --------------------------------------------- | ---------------- | ---------------- |
+| `dialog.tsx`       | `Dialog` from `radix-ui`                      | `"dialog"`       | `adapters.radix` |
+| `alert-dialog.tsx` | `AlertDialog` from `radix-ui`                 | `"alert-dialog"` | `adapters.radix` |
+| `sheet.tsx`        | `Dialog` from `radix-ui` (`SheetPrimitive`)   | `"sheet"`        | `adapters.radix` |
+| `drawer.tsx`       | `Drawer` from `vaul` (`DrawerPrimitive`)      | `"drawer"`       | `adapters.vaul`  |
+
+> [!TIP]
+> Older shadcn/ui files import `* as DialogPrimitive from "@radix-ui/react-dialog"`. Rename that import the same way: `import * as RadixDialog from "@radix-ui/react-dialog"`.
+
+<details>
+<summary><b>shadcn/ui on Base UI</b></summary>
+
+Base UI's files type their props with `DialogPrimitive.Root.Props`, which needs the import itself. Keep it, give the managed parts their own name, and use them where the root and the portal are rendered:
+
+```diff
+ // components/ui/dialog.tsx
+ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
++import { adapters } from "@addstack/managed-modals/react"
++import { managed } from "@/lib/modals"
++
++const ManagedDialog = managed(DialogPrimitive, { kind: "dialog", adapter: adapters.baseUi })
+
+-function Dialog({ ...props }: DialogPrimitive.Root.Props) {
+-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
++function Dialog({ ...props }: React.ComponentProps<typeof ManagedDialog.Root>) {
++  return <ManagedDialog.Root data-slot="dialog" {...props} />
  }
-+const Dialog = managed(DialogRoot, { kind: "dialog", adapter: adapters.radix });
 
- function DialogContent({ className, children, ...props }: React.ComponentProps<typeof DialogPrimitive.Content>) {
-   return (
-+    <ModalActivity>
-       <DialogPortal data-slot="dialog-portal">
-         <DialogOverlay />
-         <DialogPrimitive.Content data-slot="dialog-content" className={cn(/* … */, className)} {...props}>
-           {children}
-         </DialogPrimitive.Content>
-       </DialogPortal>
-+    </ModalActivity>
-   );
+ function DialogPortal({ ...props }: DialogPrimitive.Portal.Props) {
+-  return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />
++  return <ManagedDialog.Portal data-slot="dialog-portal" {...props} />
  }
 ```
 
-Do the same in the other files you use (the content component is `AlertDialogContent`, `SheetContent`, `DrawerContent`):
+The same goes for `alert-dialog.tsx`, `sheet.tsx` and `drawer.tsx`, all with `adapters.baseUi`.
 
-| File               | Root          | `kind`           | `adapter`                                        |
-| ------------------ | ------------- | ---------------- | ------------------------------------------------ |
-| `dialog.tsx`       | `Dialog`      | `"dialog"`       | `adapters.radix` (Radix) or `adapters.baseUi` (Base UI) |
-| `alert-dialog.tsx` | `AlertDialog` | `"alert-dialog"` | `adapters.radix` or `adapters.baseUi`            |
-| `sheet.tsx`        | `Sheet`       | `"sheet"`        | `adapters.radix` or `adapters.baseUi`            |
-| `drawer.tsx`       | `Drawer`      | `"drawer"`       | `adapters.vaul` (vaul) or `adapters.baseUi` (Base UI) |
+</details>
 
 ### 4. Name the modals the scheduler should manage
 
@@ -144,7 +166,7 @@ Do the same in the other files you use (the content component is `AlertDialogCon
 > - A modal that is queued or suspended keeps `open === true` in your state. `onOpenChange(false)` is **not** called when the scheduler hides it.
 > - `onOpenChange(false)` is called when the user closes the modal, or when the scheduler **dismisses** it for good (see `onPreempt`, `whenBlocked`, `maxWaitMs`, `unique`). `onDismiss(reason)` is called right before, so you can tell the two apart.
 
-**Next steps:** see [what `<ModalActivity>` keeps](#-keeping-a-suspended-modals-state) (and how to pause a video), or serialize exit animations with [`awaitExit`](#-waiting-for-exit-animations-awaitexit).
+**Next steps:** see [what a suspended modal keeps](#-keeping-a-suspended-modals-state) (and how to pause a video), or serialize exit animations with [`awaitExit`](#-waiting-for-exit-animations-awaitexit).
 
 ---
 
@@ -182,7 +204,7 @@ An instance can override the policy with `priority={95}` (reactive) or `policy={
 
 ### 💾 Keeping a suspended modal's state
 
-When a modal is preempted, its content has to stay alive to keep form state, scroll position or a playing video. That is the `<ModalActivity>` line from the [quick start](#3-wrap-the-root-and-the-content-in-componentsui), around the portal of each content component. It works on Radix, Base UI and vaul.
+When a modal is preempted, its content has to stay alive to keep form state, scroll position or a playing video. The managed `Portal` from the [quick start](#3-wrap-the-primitive-in-componentsui) takes care of it: it renders the library's portal inside `<ModalActivity>`. It works on Radix, Base UI and vaul.
 
 While the modal is suspended, React's [`<Activity>`](https://react.dev/reference/react/Activity) hides the content and cleans up its effects (focus trap, scroll lock, `aria-hidden` on the page) but keeps its state and DOM. When the modal comes back, it is shown again as it was, with focus on its first field, as when it opens. Nested modals, such as a dialog inside a drawer, are hidden and brought back with their flow, and stay known to the scheduler meanwhile. Outside a managed modal, `<ModalActivity>` renders its children as they are.
 
@@ -199,7 +221,7 @@ It also hides the content of a modal that is waiting in the queue. Content that 
 > }
 > ```
 
-Without `<ModalActivity>` everything still works: a suspended modal unmounts its content, and local state is lost unless you lift it.
+`managed()` also takes a root component alone, e.g. `managed(DialogPrimitive.Root, options)`, for primitives without a `Portal` part. Put `<ModalActivity>` around the content's portal yourself then. Without it everything still works: a suspended modal unmounts its content, and local state is lost unless you lift it.
 
 ### 🎬 Waiting for exit animations (`awaitExit`)
 
@@ -264,10 +286,16 @@ function ModalDebugger() {
 }
 ```
 
-## ⬆️ Upgrading from 1.x
+## ⬆️ Upgrading
+
+### From 2.0
+
+The 2.0 setup, `managed()` on the root plus `<ModalActivity>` around the portal, keeps working. To simplify a file, undo both and wrap the import instead, as in the [quick start](#3-wrap-the-primitive-in-componentsui).
+
+### From 1.x
 
 - React 19.2 or later is required.
-- The `keepMounted` content integration is gone. In each content component (`DialogContent`, `AlertDialogContent`, `SheetContent`, `DrawerContent`), remove what it added (`useModalPresentation()`, `forceMount`/`keepMounted` on the portal, `hidden`, the overlay condition, `onCloseAutoFocus`/`finalFocus`, `useFocusOnResume`) and wrap the portal with `<ModalActivity>` instead, as in the [quick start](#3-wrap-the-root-and-the-content-in-componentsui).
+- The `keepMounted` content integration is gone. In each content component (`DialogContent`, `AlertDialogContent`, `SheetContent`, `DrawerContent`), remove what it added (`useModalPresentation()`, `forceMount`/`keepMounted` on the portal, `hidden`, the overlay condition, `onCloseAutoFocus`/`finalFocus`, `useFocusOnResume`). Then wrap the file's import, as in the [quick start](#3-wrap-the-primitive-in-componentsui).
 - `useFocusOnResume` is removed, and `useModalPresentation()` returns `{ status, open, dismissReason? }` (no `keepMounted`, no `suppressFinalFocus`).
 
 ## 📝 Notes

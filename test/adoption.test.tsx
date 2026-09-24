@@ -14,8 +14,8 @@ import { adapters, createManagedModals, ModalActivity, type ModalAdapter } from 
 
 // Incremental adoption: adding the library to an existing project, without
 // naming any modal, must not change anything. Each scenario runs twice, on the
-// plain primitives ("before") and with <ModalProvider>, roots wrapped in
-// managed() and the README's content changes, but no names ("after"), and
+// plain primitives ("before") and with <ModalProvider> and the primitives
+// wrapped in managed() as the README shows, but no names ("after"), and
 // compares the DOM, focus, onOpenChange calls and console output step by step.
 
 beforeAll(() => {
@@ -39,19 +39,21 @@ const policies = { billing: { priority: 80 } } as const;
 type ContentProps = { title: string; children?: ReactNode };
 // The harness renders every primitive through the same props; their own prop types differ.
 type AnyRoot = ComponentType<any>;
+type AnyParts = { Root: AnyRoot; Trigger: ComponentType<{ children?: ReactNode }> } & Record<string, any>;
 
 type Kit = {
   label: string;
-  Root: AnyRoot;
-  Trigger: ComponentType<{ children?: ReactNode }>;
+  /** The primitive's parts, as its library exports them. */
+  parts: AnyParts;
   kind: ModalKind;
   adapter: ModalAdapter;
-  content: { plain: ComponentType<ContentProps> };
+  /** The shadcn/ui content component, built on the given parts. */
+  content: (parts: AnyParts) => ComponentType<ContentProps>;
   /** The kit a dialog opened from inside this one comes from. */
   nested: () => Kit;
 };
 
-// --- content components: the shadcn/ui ones, and with the README's change -------------
+// --- content components: the shadcn/ui ones, and with <ModalActivity> added by hand -------
 
 function withActivity(Content: ComponentType<ContentProps>): ComponentType<ContentProps> {
   return function ActivityContent(props: ContentProps) {
@@ -63,159 +65,145 @@ function withActivity(Content: ComponentType<ContentProps>): ComponentType<Conte
   };
 }
 
-function RadixPlain({ title, children }: ContentProps) {
-  return (
-    <RadixDialog.Portal>
-      <RadixDialog.Overlay />
-      <RadixDialog.Content aria-describedby={undefined}>
-        <RadixDialog.Title>{title}</RadixDialog.Title>
-        {children}
-        <RadixDialog.Close>Close {title}</RadixDialog.Close>
-      </RadixDialog.Content>
-    </RadixDialog.Portal>
-  );
-}
+const radixContent = (P: AnyParts) =>
+  function Content({ title, children }: ContentProps) {
+    return (
+      <P.Portal>
+        <P.Overlay />
+        <P.Content aria-describedby={undefined}>
+          <P.Title>{title}</P.Title>
+          {children}
+          <P.Close>Close {title}</P.Close>
+        </P.Content>
+      </P.Portal>
+    );
+  };
 
-function RadixAlertPlain({ title, children }: ContentProps) {
-  return (
-    <RadixAlertDialog.Portal>
-      <RadixAlertDialog.Overlay />
-      <RadixAlertDialog.Content aria-describedby={undefined}>
-        <RadixAlertDialog.Title>{title}</RadixAlertDialog.Title>
-        {children}
-        <RadixAlertDialog.Cancel>Close {title}</RadixAlertDialog.Cancel>
-      </RadixAlertDialog.Content>
-    </RadixAlertDialog.Portal>
-  );
-}
+const radixAlertContent = (P: AnyParts) =>
+  function Content({ title, children }: ContentProps) {
+    return (
+      <P.Portal>
+        <P.Overlay />
+        <P.Content aria-describedby={undefined}>
+          <P.Title>{title}</P.Title>
+          {children}
+          <P.Cancel>Close {title}</P.Cancel>
+        </P.Content>
+      </P.Portal>
+    );
+  };
 
-function BasePlain({ title, children }: ContentProps) {
-  return (
-    <BaseDialog.Portal>
-      <BaseDialog.Backdrop />
-      <BaseDialog.Popup>
-        <BaseDialog.Title>{title}</BaseDialog.Title>
-        {children}
-        <BaseDialog.Close>Close {title}</BaseDialog.Close>
-      </BaseDialog.Popup>
-    </BaseDialog.Portal>
-  );
-}
+const baseContent = (P: AnyParts) =>
+  function Content({ title, children }: ContentProps) {
+    return (
+      <P.Portal>
+        <P.Backdrop />
+        <P.Popup>
+          <P.Title>{title}</P.Title>
+          {children}
+          <P.Close>Close {title}</P.Close>
+        </P.Popup>
+      </P.Portal>
+    );
+  };
 
-function BaseAlertPlain({ title, children }: ContentProps) {
-  return (
-    <BaseAlertDialog.Portal>
-      <BaseAlertDialog.Backdrop />
-      <BaseAlertDialog.Popup>
-        <BaseAlertDialog.Title>{title}</BaseAlertDialog.Title>
-        {children}
-        <BaseAlertDialog.Close>Close {title}</BaseAlertDialog.Close>
-      </BaseAlertDialog.Popup>
-    </BaseAlertDialog.Portal>
-  );
-}
+const baseDrawerContent = (P: AnyParts) =>
+  function Content({ title, children }: ContentProps) {
+    return (
+      <P.Portal>
+        <P.Backdrop />
+        <P.Viewport>
+          <P.Popup>
+            <P.Content>
+              <P.Title>{title}</P.Title>
+              {children}
+              <P.Close>Close {title}</P.Close>
+            </P.Content>
+          </P.Popup>
+        </P.Viewport>
+      </P.Portal>
+    );
+  };
 
-function BaseDrawerPlain({ title, children }: ContentProps) {
-  return (
-    <BaseDrawer.Portal>
-      <BaseDrawer.Backdrop />
-      <BaseDrawer.Viewport>
-        <BaseDrawer.Popup>
-          <BaseDrawer.Content>
-            <BaseDrawer.Title>{title}</BaseDrawer.Title>
-            {children}
-            <BaseDrawer.Close>Close {title}</BaseDrawer.Close>
-          </BaseDrawer.Content>
-        </BaseDrawer.Popup>
-      </BaseDrawer.Viewport>
-    </BaseDrawer.Portal>
-  );
-}
-
-function VaulPlain({ title, children }: ContentProps) {
-  return (
-    <VaulDrawer.Portal>
-      <VaulDrawer.Overlay />
-      <VaulDrawer.Content aria-describedby={undefined}>
-        <VaulDrawer.Title>{title}</VaulDrawer.Title>
-        {children}
-        <VaulDrawer.Close>Close {title}</VaulDrawer.Close>
-      </VaulDrawer.Content>
-    </VaulDrawer.Portal>
-  );
-}
+const vaulContent = (P: AnyParts) =>
+  function Content({ title, children }: ContentProps) {
+    return (
+      <P.Portal>
+        <P.Overlay />
+        <P.Content aria-describedby={undefined}>
+          <P.Title>{title}</P.Title>
+          {children}
+          <P.Close>Close {title}</P.Close>
+        </P.Content>
+      </P.Portal>
+    );
+  };
 
 const radixDialog: Kit = {
   label: "Radix Dialog",
-  Root: RadixDialog.Root,
-  Trigger: RadixDialog.Trigger,
+  parts: RadixDialog,
   kind: "dialog",
   adapter: adapters.radix,
-  content: { plain: RadixPlain },
+  content: radixContent,
   nested: () => radixDialog,
 };
 const baseDialog: Kit = {
   label: "Base UI Dialog",
-  Root: BaseDialog.Root,
-  Trigger: BaseDialog.Trigger,
+  parts: BaseDialog,
   kind: "dialog",
   adapter: adapters.baseUi,
-  content: { plain: BasePlain },
+  content: baseContent,
   nested: () => baseDialog,
 };
 const kits: Kit[] = [
   radixDialog,
   {
     label: "Radix AlertDialog",
-    Root: RadixAlertDialog.Root,
-    Trigger: RadixAlertDialog.Trigger,
+    parts: RadixAlertDialog,
     kind: "alert-dialog",
     adapter: adapters.radix,
-    content: { plain: RadixAlertPlain },
+    content: radixAlertContent,
     nested: () => radixDialog,
   },
   baseDialog,
   {
     label: "Base UI AlertDialog",
-    Root: BaseAlertDialog.Root,
-    Trigger: BaseAlertDialog.Trigger,
+    parts: BaseAlertDialog,
     kind: "alert-dialog",
     adapter: adapters.baseUi,
-    content: { plain: BaseAlertPlain },
+    content: baseContent,
     nested: () => baseDialog,
   },
   {
     label: "Base UI Drawer",
-    Root: BaseDrawer.Root,
-    Trigger: BaseDrawer.Trigger,
+    parts: BaseDrawer,
     kind: "drawer",
     adapter: adapters.baseUi,
-    content: { plain: BaseDrawerPlain },
+    content: baseDrawerContent,
     nested: () => baseDialog,
   },
   {
     label: "vaul Drawer",
-    Root: VaulDrawer.Root,
-    Trigger: VaulDrawer.Trigger,
+    parts: VaulDrawer,
     kind: "drawer",
     adapter: adapters.vaul,
-    content: { plain: VaulPlain },
+    content: vaulContent,
     nested: () => radixDialog,
   },
 ];
 
 // --- "before" and "after" ------------------------------------------------------------------
 
-type Integration = "managed() only" | "managed() + <ModalActivity>";
+type Integration = "managed(parts)" | "managed(Root) only" | "managed(Root) + <ModalActivity>";
 
 /** What a scenario renders with: the plain primitives, or the adopted ones. */
 type Env = {
   Provider: ComponentType<{ children?: ReactNode }>;
   Root: AnyRoot;
-  Trigger: Kit["Trigger"];
+  Trigger: AnyParts["Trigger"];
   Content: ComponentType<ContentProps>;
   NestedRoot: AnyRoot;
-  NestedTrigger: Kit["Trigger"];
+  NestedTrigger: AnyParts["Trigger"];
   NestedContent: ComponentType<ContentProps>;
   /** Props that make a root a managed, named modal "after"; none "before". */
   named: Record<string, string>;
@@ -229,29 +217,39 @@ function before(kit: Kit): Env {
   const nested = kit.nested();
   return {
     Provider: Fragment,
-    Root: kit.Root,
-    Trigger: kit.Trigger,
-    Content: kit.content.plain,
-    NestedRoot: nested.Root,
-    NestedTrigger: nested.Trigger,
-    NestedContent: nested.content.plain,
+    Root: kit.parts.Root,
+    Trigger: kit.parts.Trigger,
+    Content: kit.content(kit.parts),
+    NestedRoot: nested.parts.Root,
+    NestedTrigger: nested.parts.Trigger,
+    NestedContent: nested.content(nested.parts),
     named: {},
   };
 }
 
 function after(kit: Kit, integration: Integration): Env {
   const modals = createManagedModals({ policies });
-  const nested = kit.nested();
-  const content = (of: Kit): ComponentType<ContentProps> =>
-    integration === "managed() + <ModalActivity>" ? withActivity(of.content.plain) : of.content.plain;
+  const adopt = (of: Kit): Pick<Env, "Root" | "Trigger" | "Content"> => {
+    const options = { kind: of.kind, adapter: of.adapter };
+    if (integration === "managed(parts)") {
+      const parts = modals.managed(of.parts, options);
+      return { Root: parts.Root, Trigger: parts.Trigger, Content: of.content(parts) };
+    }
+    const Content = of.content(of.parts);
+    return {
+      Root: modals.managed(of.parts.Root, options),
+      Trigger: of.parts.Trigger,
+      Content: integration === "managed(Root) + <ModalActivity>" ? withActivity(Content) : Content,
+    };
+  };
+  const own = adopt(kit);
+  const nested = adopt(kit.nested());
   return {
     Provider: modals.ModalProvider,
-    Root: modals.managed(kit.Root, { kind: kit.kind, adapter: kit.adapter }),
-    Trigger: kit.Trigger,
-    Content: content(kit),
-    NestedRoot: modals.managed(nested.Root, { kind: nested.kind, adapter: nested.adapter }),
+    ...own,
+    NestedRoot: nested.Root,
     NestedTrigger: nested.Trigger,
-    NestedContent: content(nested),
+    NestedContent: nested.Content,
     named: { name: "billing" },
   };
 }
@@ -438,7 +436,7 @@ async function run(scenario: Scenario, env: Env): Promise<string[]> {
   return snapshots;
 }
 
-const integrations: Integration[] = ["managed() only", "managed() + <ModalActivity>"];
+const integrations: Integration[] = ["managed(parts)", "managed(Root) only", "managed(Root) + <ModalActivity>"];
 
 describe.each(kits)("$label", (kit) => {
   describe.each(integrations)("%s, no names", (integration) => {
@@ -454,7 +452,7 @@ describe("the check itself", () => {
   test("it sees the difference once modals are named: named modals are scheduled", async () => {
     const scenario = scenarios.find((candidate) => candidate.name.startsWith("two independent"))!;
     const namedEverywhere: Env = {
-      ...after(radixDialog, "managed() only"),
+      ...after(radixDialog, "managed(parts)"),
     };
     const NamedRoot = namedEverywhere.Root;
     namedEverywhere.Root = (props: object) => <NamedRoot name="billing" {...props} />;
