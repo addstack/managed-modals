@@ -3,7 +3,7 @@ import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import * as RadixDialog from "@radix-ui/react-dialog";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
-import { useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { StrictMode, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { Drawer as VaulDrawer } from "vaul";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 
@@ -391,6 +391,13 @@ describe.runIf(hasActivity)("vaul", () => {
   });
 });
 
+/** Media positions of the jsdom stand-in, and what an engine does without any event. */
+const times = new WeakMap<HTMLMediaElement, number>();
+function engineDropsPosition(media: HTMLMediaElement) {
+  times.set(media, 0);
+  media.dispatchEvent(new Event("waiting"));
+}
+
 describe("usePauseWhileSuspended", () => {
   // jsdom does not play media: a minimal stand-in for play/pause.
   beforeAll(() => {
@@ -399,6 +406,18 @@ describe("usePauseWhileSuspended", () => {
       configurable: true,
       get(this: HTMLMediaElement) {
         return paused.get(this) ?? true;
+      },
+    });
+    Object.defineProperty(HTMLMediaElement.prototype, "currentTime", {
+      configurable: true,
+      get(this: HTMLMediaElement) {
+        return times.get(this) ?? 0;
+      },
+      // Seeking, as in a browser: `seeking` at once, `seeked` a moment later.
+      set(this: HTMLMediaElement, time: number) {
+        times.set(this, time);
+        this.dispatchEvent(new Event("seeking"));
+        setTimeout(() => this.dispatchEvent(new Event("seeked")));
       },
     });
     HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
@@ -435,7 +454,7 @@ describe("usePauseWhileSuspended", () => {
     ...(hasActivity ? ([["ModalActivity", RadixContent]] as const) : []),
     ["keepMounted", KeepMountedContent],
   ] as const) {
-    test(`${integration}: a playing video is paused while suspended and plays again when it comes back`, () => {
+    test(`${integration}: a playing video is paused while suspended and plays again from the same point (Strict Mode)`, async () => {
       const { ModalProvider, Dialog } = setup();
       let setSession!: (open: boolean) => void;
 
@@ -456,9 +475,14 @@ describe("usePauseWhileSuspended", () => {
         );
       }
 
-      render(<App />);
+      render(
+        <StrictMode>
+          <App />
+        </StrictMode>,
+      );
       const video = screen.getByTestId<HTMLVideoElement>("video");
       act(() => void video.play());
+      video.currentTime = 7;
 
       act(() => setSession(true));
       expect(visibleDialogs()).toEqual(["Session expired"]);
@@ -467,7 +491,52 @@ describe("usePauseWhileSuspended", () => {
       act(() => setSession(false));
       expect(visibleDialogs()).toEqual(["Intro video"]);
       expect(screen.getByTestId("video")).toBe(video);
-      expect(video.paused).toBe(false);
+      await waitFor(() => expect(video.paused).toBe(false));
+      expect(video.currentTime).toBe(7);
+    });
+
+    test(`${integration}: a video comes back at the same point even if the engine drops its position after resuming`, async () => {
+      const { ModalProvider, Dialog } = setup();
+      let setSession!: (open: boolean) => void;
+
+      function App() {
+        const [session, setSessionState] = useState(false);
+        setSession = setSessionState;
+        return (
+          <ModalProvider>
+            <Dialog name="edit-user" defaultOpen>
+              <Content title="Intro video">
+                <Video />
+              </Content>
+            </Dialog>
+            <Dialog name="session-expired" open={session} onOpenChange={setSessionState}>
+              <Content title="Session expired" />
+            </Dialog>
+          </ModalProvider>
+        );
+      }
+
+      render(
+        <StrictMode>
+          <App />
+        </StrictMode>,
+      );
+      const video = screen.getByTestId<HTMLVideoElement>("video");
+      act(() => void video.play());
+      video.currentTime = 12.5;
+
+      act(() => setSession(true));
+      act(() => setSession(false));
+      await waitFor(() => expect(video.paused).toBe(false));
+      // WebKit with GStreamer: playback starts over a moment after it resumes.
+      engineDropsPosition(video);
+      expect(video.currentTime).toBe(12.5);
+
+      // The user's own seek, once ours is done, is left alone.
+      await new Promise((resolve) => setTimeout(resolve));
+      video.currentTime = 3;
+      video.dispatchEvent(new Event("timeupdate"));
+      expect(video.currentTime).toBe(3);
     });
 
     test(`${integration}: a video the user paused stays paused when the modal comes back`, () => {
