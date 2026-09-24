@@ -281,6 +281,8 @@ describe.runIf(hasActivity)("Base UI", () => {
 
     act(() => setSession(true));
     await waitFor(() => expect(visibleDialogs()).toEqual(["Session expired"]));
+    // As for a user: Escape goes to the dialog on top once it holds focus (jsdom keeps focus on hidden elements).
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "Session expired" }).contains(document.activeElement)).toBe(true));
 
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     await waitFor(() => expect(visibleDialogs()).toEqual(["Edit user"]));
@@ -290,7 +292,11 @@ describe.runIf(hasActivity)("Base UI", () => {
 });
 
 describe.runIf(hasActivity)("Base UI behind a Radix dialog", () => {
-  test("Escape and outside presses meant for the dialog on top do not close the suspended one", async () => {
+  // Base UI listens for Escape and outside presses at its root, which stays
+  // open behind a <ModalActivity>. Radix closes the dialog on top first
+  // (synchronously), which brings the Base UI dialog back while the same
+  // event, or the rest of the same press, is still on its way to it.
+  function setupMixed() {
     const { ModalProvider, BaseDialogRoot, Dialog } = setup();
     const onEditOpenChange = vi.fn();
     let setSession!: (open: boolean) => void;
@@ -312,20 +318,42 @@ describe.runIf(hasActivity)("Base UI behind a Radix dialog", () => {
       );
     }
 
+    return { App, onEditOpenChange, openSession: () => setSession(true) };
+  }
+
+  async function preempt({ App, openSession }: ReturnType<typeof setupMixed>) {
     render(<App />);
     await waitFor(() => expect(visibleDialogs()).toEqual(["Edit user"]));
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Ada" } });
-
-    act(() => setSession(true));
+    act(() => openSession());
     expect(visibleDialogs()).toEqual(["Session expired"]);
-    fireEvent.pointerDown(document.body);
-    fireEvent.mouseDown(document.body);
-    fireEvent.click(document.body);
-    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "Session expired" }).contains(document.activeElement)).toBe(true));
+  }
 
+  test("Escape closes only the dialog on top", async () => {
+    const mixed = setupMixed();
+    await preempt(mixed);
+
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     await waitFor(() => expect(visibleDialogs()).toEqual(["Edit user"]));
     expect(screen.getByLabelText<HTMLInputElement>("Name").value).toBe("Ada");
-    expect(onEditOpenChange).not.toHaveBeenCalled();
+    expect(mixed.onEditOpenChange).not.toHaveBeenCalled();
+  });
+
+  test("a mouse press outside closes only the dialog on top, the rest of the press included", async () => {
+    const mixed = setupMixed();
+    await preempt(mixed);
+
+    fireEvent.pointerDown(document.body, { pointerType: "mouse" });
+    fireEvent.mouseDown(document.body);
+    fireEvent.pointerUp(document.body, { pointerType: "mouse" });
+    fireEvent.mouseUp(document.body);
+    fireEvent.click(document.body);
+    await waitFor(() => expect(visibleDialogs()).toEqual(["Edit user"]));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(visibleDialogs()).toEqual(["Edit user"]);
+    expect(screen.getByLabelText<HTMLInputElement>("Name").value).toBe("Ada");
+    expect(mixed.onEditOpenChange).not.toHaveBeenCalled();
   });
 });
 
