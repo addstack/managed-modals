@@ -1,7 +1,6 @@
 "use client";
 
-import * as React from "react";
-import { useContext, useId, useRef, useState, type ReactNode } from "react";
+import { Activity, useContext, useId, useRef, useState, type ReactNode } from "react";
 
 import { isDescendantOf } from "../core/index.js";
 import {
@@ -14,34 +13,29 @@ import {
 } from "./context.js";
 import { useIsomorphicLayoutEffect } from "./use-managed-modal.js";
 
-type ActivityComponent = React.ComponentType<{ mode: "visible" | "hidden"; children?: ReactNode }>;
-
-/** `<Activity>` from React 19.2+, `undefined` on older versions. */
-const Activity = (React as unknown as { Activity?: ActivityComponent }).Activity;
-
 /**
  * Keeps a suspended modal's content alive with React's `<Activity>`: it is
  * hidden, its effects (focus trap, scroll lock, `aria-hidden` on the page)
  * are cleaned up, and its state and DOM are kept until the modal comes back.
  * Content of a queued modal is hidden the same way, in case it renders while
- * its root is closed (`forceMount`, `keepMounted`, JS animation libraries).
+ * its root is closed (Radix `forceMount`, Base UI `keepMounted`, JS animation
+ * libraries).
  *
  * Wrap the portal of your content component with it, e.g. in shadcn/ui's
- * `DialogContent`. Outside a managed modal, and before React 19.2, it renders
- * its children as they are.
+ * `DialogContent`. Outside a managed modal it renders its children as they are.
  */
 export function ModalActivity({ children }: { children?: ReactNode }) {
   const id = useId();
   const modal = useContext(ManagedModalContext);
   const store = useContext(ModalStoreContext);
   const parentState = useContext(ActivityStateContext);
-  const enabled = Activity !== undefined && modal !== null && store !== null;
+  const enabled = modal !== null && store !== null;
   const requestId = modal?.requestId ?? null;
   const register = modal?.registerActivity;
   const status = modal?.presentation.status;
   const suspended = enabled && status === "suspended";
   // Queued modals are hidden too, for content that renders while its root is
-  // closed (`forceMount`, `keepMounted`, JS animation libraries).
+  // closed (Radix `forceMount`, Base UI `keepMounted`, JS animation libraries).
   const concealed = suspended || (enabled && status === "pending");
   // A nested modal comes back one commit after its parent (still before paint).
   // Primitives such as Radix stack layers in the order their effects register,

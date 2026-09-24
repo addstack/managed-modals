@@ -46,7 +46,7 @@ export function App() {
       <main>
         <h1>managed-modals fixture</h1>
         <p>
-          Dialogs: {options.kit}. Drawers: {options.drawer}. Content: {options.content}.
+          Dialogs: {options.kit}. Drawers: {options.drawer}.
         </p>
         <div className="toolbar">
           <Dialog

@@ -1,6 +1,6 @@
 # managed-modals — specification
 
-Status: describes version 0.1.0. This is the normative description of behaviour; the tests in [`test/`](../test) (jsdom) and [`e2e/`](../e2e) (Playwright) are its executable form. When code and this document disagree, one of them is a bug.
+Status: describes version 2. This is the normative description of behaviour; the tests in [`test/`](../test) (jsdom) and [`e2e/`](../e2e) (Playwright) are its executable form. When code and this document disagree, one of them is a bug.
 
 - [1. Scope](#1-scope)
 - [2. Terminology](#2-terminology)
@@ -25,7 +25,7 @@ It is split into two layers:
 | Layer | Entry point | Depends on | Responsibility |
 | --- | --- | --- | --- |
 | Core | `@addstack/managed-modals` | nothing | Pure reducer, store, policies, presentation selector. |
-| React binding | `@addstack/managed-modals/react` | `react` (peer, ≥ 18) | Registers modals from components, wraps primitive roots, provides context. |
+| React binding | `@addstack/managed-modals/react` | `react` (peer, ≥ 19.2) | Registers modals from components, wraps primitive roots, provides context. |
 
 Neither layer imports Radix, Base UI, vaul or shadcn. Primitive-specific behaviour lives in *adapters* (plain objects) and in small changes to the application's own content components ([§11](#11-adapters-and-content-integration)).
 
@@ -244,23 +244,17 @@ The store completes any exit that is not reported within `exitTimeoutMs` (defaul
 
 `getModalPresentation(state, requestId)` maps one request to what a primitive needs:
 
-| Situation | `status` | `open` | `keepMounted` | `suppressFinalFocus` |
-| --- | --- | --- | --- | --- |
-| no request id / not registered | `idle` | false | false | false |
-| `pending` | `pending` | false | false | false |
-| `active` / `covered`, visible | same | **true** | true | false |
-| `active` / `covered`, entry-blocked, never shown | `pending` | false | false | false |
-| `active` / `covered`, entry-blocked, shown before | `suspended` | false | true | true |
-| `suspended` | `suspended` | false | true | true |
-| `dismissed` | `dismissed` | false | false | `dismissReason === "preempted"` |
+| Situation | `status` | `open` |
+| --- | --- | --- |
+| no request id / not registered | `idle` | false |
+| `pending` | `pending` | false |
+| `active` / `covered`, visible | same | **true** |
+| `active` / `covered`, entry-blocked, never shown | `pending` | false |
+| `active` / `covered`, entry-blocked, shown before | `suspended` | false |
+| `suspended` | `suspended` | false |
+| `dismissed` | `dismissed` | false |
 
-`dismissReason` is included for `dismissed`.
-
-The React binding adds one transient presentation. When the application closes a modal while it is `suspended` (its intent goes `false`), the content reads `{ status: "suspended", open: false, keepMounted: false, suppressFinalFocus: true }` for the commit in which the primitive takes the content down, then `idle`. Content that hides itself while suspended (the `keepMounted` integration) stays hidden instead of playing its exit animation over the active modal.
-
-- `open` is the value for the primitive's `open` prop.
-- `keepMounted` stays `true` for the whole life of a shown request (on screen or suspended), not only while it is suspended. Some primitives (Base UI) derive their mounted state from `open` with a delay of one render. Dropping `keepMounted` in the same render that sets `open` again would remount the content and lose its state.
-- `suppressFinalFocus` means the modal is closing because of a scheduler switch, not because the user closed it. The primitive must not move focus back to its trigger.
+`dismissReason` is included for `dismissed`. `open` says whether the modal is on screen; the React binding derives the primitive's `open` prop from it ([§10.4](#104-managed-roots)).
 
 `IDLE_PRESENTATION` is a frozen singleton.
 
@@ -370,11 +364,7 @@ The returned props are merged over the user's props, before `open` and `onOpenCh
 
 ### 11.2 Content integration
 
-Keeping a suspended modal's content alive has to happen at the content level: wrapping the whole root would also hide its trigger, which lives on the page.
-
-#### `<ModalActivity>` (React 19.2+)
-
-`<ModalActivity>` wraps the content's portal and renders React's `<Activity>` around it:
+Keeping a suspended modal's content alive has to happen at the content level: wrapping the whole root would also hide its trigger, which lives on the page. `<ModalActivity>` wraps the content's portal and renders React's `<Activity>` around it:
 
 1. **Registration.** In a layout effect it registers with the nearest managed modal (`registerActivity(id)`, unregistered on cleanup). While at least one boundary is registered, the root keeps the primitive open while the modal is `suspended` ([§10.4](#104-managed-roots)).
 2. **Hiding.** Its mode is `hidden` while the modal is `suspended` or `pending` (queued, including entry-blocked before it was ever shown). Hiding queued content matters for content that renders while its root is closed (`forceMount`, Base UI `keepMounted`, animation libraries driven by the application's `open`). React then hides the content, portals included, with `display: none`, and cleans up its effects: the primitive's focus trap, scroll lock, dismissable layer and `aria-hidden` on the page go away, while state and DOM are kept. When the modal is on screen again, the mode is `visible` and the effects come back, as on open.
@@ -383,25 +373,13 @@ Keeping a suspended modal's content alive has to happen at the content level: wr
 5. **Reveal order.** A nested boundary stays hidden while its parent boundary is `"revealing"`, and is revealed one commit later, still before paint. Primitives such as Radix stack their layers in the order their effects register, and React runs a child's effects before its parent's; revealing both at once would put the parent's layer on top (Escape would close both).
 6. **Assistive technology.** While the parent's content effects run on reveal, the nested content's portals are already in the document (hidden). Radix, through `aria-hidden`'s `hideOthers`, marks them as outside the parent, which a normal open never does. When a nested boundary is revealed, it removes that `aria-hidden` from the portals it reveals: the `<body>` children that React hid (`display: none !important`) while the boundary was hidden and that are visible now, when they carry `aria-hidden`'s `data-aria-hidden` marker.
 
-Outside a managed modal, and on React versions without `<Activity>`, it renders its children as they are and does not register.
+Outside a managed modal it renders its children as they are and does not register.
 
 Scroll positions: the provider remembers the positions of elements scrolled inside dialogs (a capturing `scroll` listener, ignoring elements that are not rendered). When a modal goes from `suspended` back on screen, positions that the browser lost while the content was hidden are put back, in a layout effect and again on the next animation frame. Firefox resets the position of an element with `display: none`; other browsers keep it.
 
-Media keeps playing while hidden. `usePauseWhileSuspended(ref)` pauses a `<video>`/`<audio>` in an effect cleanup (which runs both when the status becomes `suspended` and when a boundary hides the content) and plays it again when the modal is back, if it was playing.
+Media keeps playing while hidden. `usePauseWhileSuspended(ref)` pauses a `<video>`/`<audio>` in an effect cleanup (which runs when a boundary hides the content) and plays it again when the modal is back, if it was playing: it seeks to where playback stopped first, and puts the position back if the engine drops it anyway (WebKit with GStreamer), until playback has moved on, the user seeks, or 3 seconds have passed.
 
-#### `keepMounted` integration (all React versions)
-
-Content components read `useModalPresentation()`, which returns `null` outside a managed modal, and apply:
-
-| Primitive | Keep mounted | Hide while suspended | Suppress final focus | Focus on resume |
-| --- | --- | --- | --- | --- |
-| Base UI Dialog / AlertDialog / Drawer | `Portal keepMounted={keepMounted}` | automatic (`hidden`) | `Popup finalFocus={false}` | automatic |
-| Radix Dialog / AlertDialog (shadcn Dialog, Sheet, AlertDialog) | `Portal forceMount={keepMounted \|\| undefined}` | `Content hidden`; do **not** render the overlay (it holds the scroll lock) | `onCloseAutoFocus` → `preventDefault()` | `useFocusOnResume(contentRef)` |
-| vaul | not possible (vaul cannot keep a closed drawer mounted); use `<ModalActivity>` | — | — | — |
-
-Without either integration, scheduling still works, but a suspended modal unmounts its content.
-
-`useFocusOnResume(ref)` tracks the last focused element inside the content. It attaches in a layout effect, so it runs before the primitive's own passive auto-focus. When the status goes from `suspended` to open, it focuses that element again, or the content itself as a fallback, unless focus is already inside.
+Without `<ModalActivity>`, scheduling still works, but a suspended modal unmounts its content.
 
 ### 11.3 Custom primitives
 
@@ -422,10 +400,8 @@ After every action:
 
 ## 13. Known limitations and open questions
 
-- **Test environment**: unit tests run in jsdom against React 19.3, and in CI against React 18.3 (skipping `<ModalActivity>`), Radix Dialog 1.1, Base UI 1.8 and vaul 1.1. The Playwright suite (`npm run test:e2e`) covers focus, keyboard, pointer and exit animations in Chromium, Firefox and WebKit, against a fixture app that uses the content integration from the README. Known problems are kept there as expected failures (`test.fail`, `test.fixme`) with the reason.
-- **Radix and `awaitExit`**: Radix has no exit callback, so exits complete through `exitTimeoutMs`. A suspended Radix content is hidden immediately and does not animate, yet the timeout still applies to it.
-- **vaul**: a suspended drawer keeps its state only with `<ModalActivity>`.
-- **`keepMounted` integration on Radix and Escape**: while a resumed dialog plays its enter animation, Escape may be ignored (seen on WebKit on Linux). `<ModalActivity>` does not have this.
+- **Test environment**: unit tests run in jsdom against React 19.3, Radix Dialog and AlertDialog 1.1, Base UI 1.8 and vaul 1.1. The Playwright suite (`npm run test:e2e`) covers focus, keyboard, pointer and exit animations in Chromium, Firefox and WebKit, against a fixture app that uses the content integration from the README. Known problems are kept there as expected failures (`test.fail`, `test.fixme`) with the reason.
+- **Radix and `awaitExit`**: Radix has no exit callback, so exits of dialogs the user closes complete through `exitTimeoutMs`. A suspended modal is hidden at once and completes its exit right away ([§11.2](#112-content-integration)).
 - **`<ModalActivity>` and focus**: a resumed dialog is focused as on open (its first field), not on the element that had focus before the suspension.
 - **`<ModalActivity>` and animation**: a suspended modal disappears without an exit animation; its enter animation plays again when it comes back.
 - **Name changes while open** are ignored ([§10.3](#103-registration)). A development warning could be added.

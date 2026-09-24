@@ -230,7 +230,7 @@ describe("nested flows", () => {
     expect(activeId(state)).toBe("critical");
     expect(status(state, "parent")).toBe("suspended");
     expect(status(state, "child")).toBe("suspended");
-    expect(getModalPresentation(state, "parent")).toMatchObject({ open: false, keepMounted: true });
+    expect(getModalPresentation(state, "parent")).toEqual({ status: "suspended", open: false });
 
     state = cancel(state, "critical", 400);
     expect(activeId(state)).toBe("child");
@@ -300,10 +300,10 @@ describe("policies", () => {
     state = request(state, { id: "promo", priority: 10, at: 100, onPreempt: "dismiss" });
     state = request(state, { id: "critical", priority: 100, at: 200 });
 
-    expect(getModalPresentation(state, "promo")).toMatchObject({
+    expect(getModalPresentation(state, "promo")).toEqual({
       status: "dismissed",
+      open: false,
       dismissReason: "preempted",
-      suppressFinalFocus: true,
     });
 
     state = cancel(state, "critical", 300);

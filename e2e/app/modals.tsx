@@ -5,14 +5,7 @@ import { useRef, type ComponentProps, type ReactNode } from "react";
 import { Drawer as VaulDrawer } from "vaul";
 
 import type { ModalDismissReason, ModalName as PolicyName } from "../../src/core/index.js";
-import {
-  adapters,
-  createManagedModals,
-  ModalActivity,
-  useFocusOnResume,
-  useModalPresentation,
-  usePauseWhileSuspended,
-} from "../../src/react/index.js";
+import { adapters, createManagedModals, ModalActivity, usePauseWhileSuspended } from "../../src/react/index.js";
 import { fromSearch } from "./options.js";
 
 export const options = fromSearch(window.location.search);
@@ -66,12 +59,8 @@ export function RadixModal({ title, trigger, children, handle: _handle, ...root 
   );
 }
 
-function RadixContent(props: ContentProps) {
-  return options.content === "activity" ? <RadixActivityContent {...props} /> : <RadixKeepMountedContent {...props} />;
-}
-
 /** shadcn/ui `DialogContent` on Radix, with the one-line `<ModalActivity>` integration from the README. */
-function RadixActivityContent({ title, children }: ContentProps) {
+function RadixContent({ title, children }: ContentProps) {
   return (
     <ModalActivity>
       <RadixDialog.Portal>
@@ -83,32 +72,6 @@ function RadixActivityContent({ title, children }: ContentProps) {
         </RadixDialog.Content>
       </RadixDialog.Portal>
     </ModalActivity>
-  );
-}
-
-/** shadcn/ui `DialogContent` on Radix, with the `keepMounted` integration from the README. */
-function RadixKeepMountedContent({ title, children }: ContentProps) {
-  const managed = useModalPresentation();
-  const suspended = managed?.status === "suspended";
-  const contentRef = useRef<HTMLDivElement>(null);
-  useFocusOnResume(contentRef);
-  return (
-    <RadixDialog.Portal {...(managed?.keepMounted ? { forceMount: true } : {})}>
-      {!suspended && <RadixDialog.Overlay className="overlay" />}
-      <RadixDialog.Content
-        ref={contentRef}
-        className="popup"
-        aria-describedby={undefined}
-        hidden={suspended || undefined}
-        onCloseAutoFocus={(event) => {
-          if (managed?.suppressFinalFocus) event.preventDefault();
-        }}
-      >
-        <RadixDialog.Title>{title}</RadixDialog.Title>
-        {children}
-        <RadixDialog.Close>Close</RadixDialog.Close>
-      </RadixDialog.Content>
-    </RadixDialog.Portal>
   );
 }
 
@@ -128,12 +91,8 @@ export function BaseModal({ title, trigger, children, ...root }: ModalProps) {
   );
 }
 
-function BaseContent(props: ContentProps) {
-  return options.content === "activity" ? <BaseActivityContent {...props} /> : <BaseKeepMountedContent {...props} />;
-}
-
 /** shadcn/ui `DialogContent` on Base UI, with the one-line `<ModalActivity>` integration from the README. */
-function BaseActivityContent({ title, children }: ContentProps) {
+function BaseContent({ title, children }: ContentProps) {
   return (
     <ModalActivity>
       <BaseDialog.Portal>
@@ -148,44 +107,25 @@ function BaseActivityContent({ title, children }: ContentProps) {
   );
 }
 
-/** shadcn/ui `DialogContent` on Base UI, with the `keepMounted` integration from the README. */
-function BaseKeepMountedContent({ title, children }: ContentProps) {
-  const managed = useModalPresentation();
-  return (
-    <BaseDialog.Portal keepMounted={managed?.keepMounted}>
-      <BaseDialog.Backdrop className="overlay" />
-      <BaseDialog.Popup className="popup" finalFocus={managed?.suppressFinalFocus ? false : undefined}>
-        <BaseDialog.Title>{title}</BaseDialog.Title>
-        {children}
-        <BaseDialog.Close>Close</BaseDialog.Close>
-      </BaseDialog.Popup>
-    </BaseDialog.Portal>
-  );
-}
-
 // --- vaul Drawer ------------------------------------------------------------
 
 const VaulRoot = modals.managed(VaulDrawer.Root, { kind: "drawer", adapter: adapters.vaul });
 
-/**
- * shadcn/ui `Drawer` (vaul). With `<ModalActivity>` a suspended drawer keeps
- * its state; without it (the `keepMounted` setup) vaul has no way to keep it.
- */
+/** shadcn/ui `Drawer` (vaul), with the one-line `<ModalActivity>` integration. */
 export function VaulModal({ title, trigger, children, handle: _handle, ...root }: ModalProps) {
-  const portal = (
-    <VaulDrawer.Portal>
-      <VaulDrawer.Overlay className="drawer-overlay" />
-      <VaulDrawer.Content className="drawer" aria-describedby={undefined}>
-        <VaulDrawer.Title>{title}</VaulDrawer.Title>
-        {children}
-        <VaulDrawer.Close>Close</VaulDrawer.Close>
-      </VaulDrawer.Content>
-    </VaulDrawer.Portal>
-  );
   return (
     <VaulRoot {...root}>
       {trigger !== undefined && <VaulDrawer.Trigger>{trigger}</VaulDrawer.Trigger>}
-      {options.content === "activity" ? <ModalActivity>{portal}</ModalActivity> : portal}
+      <ModalActivity>
+        <VaulDrawer.Portal>
+          <VaulDrawer.Overlay className="drawer-overlay" />
+          <VaulDrawer.Content className="drawer" aria-describedby={undefined}>
+            <VaulDrawer.Title>{title}</VaulDrawer.Title>
+            {children}
+            <VaulDrawer.Close>Close</VaulDrawer.Close>
+          </VaulDrawer.Content>
+        </VaulDrawer.Portal>
+      </ModalActivity>
     </VaulRoot>
   );
 }
@@ -206,9 +146,7 @@ export function BaseDrawerModal({ title, trigger, children, handle: _handle, ...
   );
 }
 
-function BaseDrawerContent(props: ContentProps) {
-  if (options.content === "keep-mounted") return <BaseDrawerKeepMountedContent {...props} />;
-  const { title, children } = props;
+function BaseDrawerContent({ title, children }: ContentProps) {
   return (
     <ModalActivity>
       <BaseDrawer.Portal>
@@ -224,24 +162,6 @@ function BaseDrawerContent(props: ContentProps) {
         </BaseDrawer.Viewport>
       </BaseDrawer.Portal>
     </ModalActivity>
-  );
-}
-
-function BaseDrawerKeepMountedContent({ title, children }: ContentProps) {
-  const managed = useModalPresentation();
-  return (
-    <BaseDrawer.Portal keepMounted={managed?.keepMounted}>
-      <BaseDrawer.Backdrop className="drawer-overlay" />
-      <BaseDrawer.Viewport>
-        <BaseDrawer.Popup className="drawer" finalFocus={managed?.suppressFinalFocus ? false : undefined}>
-          <BaseDrawer.Content>
-            <BaseDrawer.Title>{title}</BaseDrawer.Title>
-            {children}
-            <BaseDrawer.Close>Close</BaseDrawer.Close>
-          </BaseDrawer.Content>
-        </BaseDrawer.Popup>
-      </BaseDrawer.Viewport>
-    </BaseDrawer.Portal>
   );
 }
 

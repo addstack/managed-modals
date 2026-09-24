@@ -1,18 +1,15 @@
 // @vitest-environment jsdom
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import * as React from "react";
 import { useState, type ComponentType, type ReactNode } from "react";
 import { afterEach, describe, expect, test } from "vitest";
 
-import { adapters, createManagedModals, ModalActivity, useModalPresentation } from "../src/react/index.js";
+import { adapters, createManagedModals, ModalActivity } from "../src/react/index.js";
 
 // Base UI detached triggers: `Dialog.createHandle()`, and `<Dialog.Trigger handle>`
 // rendered outside the root, optionally with a payload for the root's content.
 
 afterEach(cleanup);
-
-const hasActivity = "Activity" in React;
 
 const policies = {
   "session-expired": { priority: 100 },
@@ -34,7 +31,7 @@ function setup() {
   return { ...modals, Root };
 }
 
-function ActivityContent({ title, children }: { title: string; children?: ReactNode }) {
+function Content({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <ModalActivity>
       <BaseDialog.Portal>
@@ -49,20 +46,6 @@ function ActivityContent({ title, children }: { title: string; children?: ReactN
   );
 }
 
-function KeepMountedContent({ title, children }: { title: string; children?: ReactNode }) {
-  const managed = useModalPresentation();
-  return (
-    <BaseDialog.Portal keepMounted={managed?.keepMounted}>
-      <BaseDialog.Backdrop />
-      <BaseDialog.Popup finalFocus={managed?.suppressFinalFocus ? false : undefined}>
-        <BaseDialog.Title>{title}</BaseDialog.Title>
-        {children}
-        <BaseDialog.Close>Close {title}</BaseDialog.Close>
-      </BaseDialog.Popup>
-    </BaseDialog.Portal>
-  );
-}
-
 function visibleDialogs(): string[] {
   return screen
     .queryAllByRole("dialog", { hidden: true })
@@ -70,12 +53,7 @@ function visibleDialogs(): string[] {
     .map((dialog) => dialog.querySelector("h2")?.textContent ?? "?");
 }
 
-const integrations = [
-  ...(hasActivity ? ([["activity", ActivityContent]] as const) : []),
-  ["keep-mounted", KeepMountedContent],
-] as const;
-
-describe.each(integrations)("%s", (_label, Content) => {
+describe("detached triggers", () => {
   function App({ handle, onSession }: { handle: BaseDialog.Handle<User>; onSession: (set: (open: boolean) => void) => void }) {
     const { ModalProvider, Root } = shared;
     const [session, setSession] = useState(false);

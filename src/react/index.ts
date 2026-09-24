@@ -19,7 +19,6 @@ export {
   type ManagedRootProps,
 } from "./managed.js";
 export { ModalActivity } from "./modal-activity.js";
-export { useFocusOnResume } from "./use-focus-on-resume.js";
 export {
   useManagedModal,
   type UseManagedModalOptions,

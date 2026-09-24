@@ -2,11 +2,11 @@
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import * as RadixDialog from "@radix-ui/react-dialog";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { StrictMode, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { StrictMode, useState, type ComponentProps, type ReactNode } from "react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import type { ModalSchedulerState } from "../src/core/index.js";
-import { adapters, createManagedModals, useFocusOnResume, useModalPresentation } from "../src/react/index.js";
+import { adapters, createManagedModals, ModalActivity } from "../src/react/index.js";
 
 afterEach(cleanup);
 
@@ -23,42 +23,32 @@ const policies = {
 // --- shadcn-style components, as a project would have them -----------------
 
 function RadixDialogContent({ title, children }: { title: string; children?: ReactNode }) {
-  const managed = useModalPresentation();
-  const suspended = managed?.status === "suspended";
-  const contentRef = useRef<HTMLDivElement>(null);
-  useFocusOnResume(contentRef);
   return (
-    // `forceMount={managed?.keepMounted || undefined}` in a regular project;
-    // spelled out here because this repo uses exactOptionalPropertyTypes.
-    <RadixDialog.Portal {...(managed?.keepMounted ? { forceMount: true } : {})}>
-      {!suspended && <RadixDialog.Overlay />}
-      <RadixDialog.Content
-        ref={contentRef}
-        aria-describedby={undefined}
-        hidden={suspended || undefined}
-        onCloseAutoFocus={(event) => {
-          if (managed?.suppressFinalFocus) event.preventDefault();
-        }}
-      >
-        <RadixDialog.Title>{title}</RadixDialog.Title>
-        {children}
-        <RadixDialog.Close>Close {title}</RadixDialog.Close>
-      </RadixDialog.Content>
-    </RadixDialog.Portal>
+    <ModalActivity>
+      <RadixDialog.Portal>
+        <RadixDialog.Overlay />
+        <RadixDialog.Content aria-describedby={undefined}>
+          <RadixDialog.Title>{title}</RadixDialog.Title>
+          {children}
+          <RadixDialog.Close>Close {title}</RadixDialog.Close>
+        </RadixDialog.Content>
+      </RadixDialog.Portal>
+    </ModalActivity>
   );
 }
 
 function BaseDialogContent({ title, children }: { title: string; children?: ReactNode }) {
-  const managed = useModalPresentation();
   return (
-    <BaseDialog.Portal keepMounted={managed?.keepMounted}>
-      <BaseDialog.Backdrop />
-      <BaseDialog.Popup finalFocus={managed?.suppressFinalFocus ? false : undefined}>
-        <BaseDialog.Title>{title}</BaseDialog.Title>
-        {children}
-        <BaseDialog.Close>Close {title}</BaseDialog.Close>
-      </BaseDialog.Popup>
-    </BaseDialog.Portal>
+    <ModalActivity>
+      <BaseDialog.Portal>
+        <BaseDialog.Backdrop />
+        <BaseDialog.Popup>
+          <BaseDialog.Title>{title}</BaseDialog.Title>
+          {children}
+          <BaseDialog.Close>Close {title}</BaseDialog.Close>
+        </BaseDialog.Popup>
+      </BaseDialog.Portal>
+    </ModalActivity>
   );
 }
 
@@ -81,7 +71,7 @@ function setup(options: { awaitExit?: boolean; exitTimeoutMs?: number } = {}) {
 function visibleDialogs(): string[] {
   return screen
     .queryAllByRole("dialog", { hidden: true })
-    .filter((dialog) => !dialog.closest("[hidden]"))
+    .filter((dialog) => !dialog.closest('[hidden], [style*="display: none"]'))
     .map((dialog) => dialog.querySelector("h2")?.textContent ?? "?");
 }
 
@@ -293,7 +283,7 @@ describe("Base UI", () => {
     await waitFor(() => expect(visibleDialogs()).toEqual([]));
   });
 
-  test("keepMounted preserves state of a preempted dialog", async () => {
+  test("a preempted dialog keeps its state", async () => {
     const { ModalProvider, BaseManaged } = setup();
     let openSession!: () => void;
 

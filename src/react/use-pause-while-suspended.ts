@@ -9,8 +9,8 @@ import { useIsomorphicLayoutEffect } from "./use-managed-modal.js";
  * Pauses a `<video>` or `<audio>` while its modal is suspended, and plays it
  * again from the same point when the modal comes back, if it was playing.
  *
- * Hidden media keeps playing (and is heard) unless something pauses it. Works
- * with both `<ModalActivity>` and the `keepMounted` integration.
+ * Hidden media keeps playing (and is heard) unless something pauses it: use it
+ * in a `<video>`/`<audio>` component rendered inside `<ModalActivity>`.
  */
 export function usePauseWhileSuspended(ref: RefObject<HTMLMediaElement | null>): void {
   const suspended = useModalPresentation()?.status === "suspended";
@@ -23,7 +23,7 @@ export function usePauseWhileSuspended(ref: RefObject<HTMLMediaElement | null>):
     const time = resumeAt.current;
     const resume = time === null ? undefined : resumeFrom(media, time);
     resumeAt.current = null;
-    // Runs when the modal is suspended, and when a <ModalActivity> hides the content.
+    // Runs when a <ModalActivity> hides the content (and when the status becomes suspended).
     return () => {
       // Cleaned up before playback started again (Strict Mode runs effects
       // twice): keep the position for the next run.

@@ -18,15 +18,10 @@ import {
 // the content integration from the README. Scheduling order itself is covered
 // by the unit tests in test/.
 
-for (const [kit, content] of [
-  ["radix", "activity"],
-  ["radix", "keep-mounted"],
-  ["base-ui", "activity"],
-  ["base-ui", "keep-mounted"],
-] as const) {
-  test.describe(`${kit} dialogs, ${content}`, () => {
+for (const kit of ["radix", "base-ui"] as const) {
+  test.describe(`${kit} dialogs`, () => {
     test.beforeEach(async ({ page }) => {
-      await openFixture(page, { kit, content });
+      await openFixture(page, { kit });
     });
 
     test("a preempted dialog keeps its fields and gets focus back when it resumes", async ({ page }) => {
@@ -43,13 +38,8 @@ for (const [kit, content] of [
       await expectShown(page, ["Edit user"]);
       await expect(page.getByLabel("Name")).toHaveValue("Ada");
       await expect(page.getByLabel("Email")).toHaveValue("ada@example.com");
-      if (kit === "radix" && content === "keep-mounted") {
-        // useFocusOnResume restores the field that had focus before the suspension.
-        await expect(page.getByLabel("Email")).toBeFocused();
-      } else {
-        // The primitive focuses the dialog's initial focus target again, as on open: its first field.
-        await expect(page.getByLabel("Name")).toBeFocused();
-      }
+      // The primitive focuses the dialog's initial focus target again, as on open: its first field.
+      await expect(page.getByLabel("Name")).toBeFocused();
 
       // The suspension was invisible to the application: no onOpenChange(false) for "Edit user".
       expect(await appEvents(page)).toEqual([
@@ -59,11 +49,6 @@ for (const [kit, content] of [
     });
 
     test("a resumed dialog can be used with the mouse", async ({ page }) => {
-      test.fail(
-        kit === "radix" && content === "keep-mounted",
-        "The README's Radix keepMounted integration unmounts the overlay while suspended. Radix portals the overlay on its own, " +
-          "so on resume it is appended to the end of <body>, above the content, and the first click closes the dialog.",
-      );
       await page.getByRole("button", { name: "Edit user" }).click();
       await setOpen(page, "session-expired", true);
       await expectShown(page, ["Session expired"]);
@@ -150,7 +135,6 @@ for (const [kit, content] of [
       await page.keyboard.press("Escape");
       await expectShown(page, ["Edit user", "Really delete?"]);
 
-      // keepMounted on Radix ignores Escape during a resumed dialog's enter animation (spec §13).
       await settle(page);
       await page.keyboard.press("Escape");
       await expectShown(page, ["Edit user"]);
@@ -180,12 +164,6 @@ for (const [kit, content] of [
     });
 
     test("focus goes to the nested dialog on top when a preempted nested flow comes back", async ({ page }) => {
-      test.fail(
-        content === "keep-mounted",
-        kit === "radix"
-          ? "useFocusOnResume in the covered parent pulls focus out of the resumed nested dialog."
-          : "Base UI focuses the parent when a parent and its nested dialog reopen in the same commit.",
-      );
       await page.getByRole("button", { name: "Edit user" }).click();
       await dialog(page, "Edit user").getByRole("button", { name: "Delete user" }).click();
       await expectShown(page, ["Edit user", "Really delete?"]);
@@ -269,26 +247,24 @@ for (const [kit, content] of [
 }
 
 test.describe("Base UI detached trigger", () => {
-  for (const content of ["activity", "keep-mounted"] as const) {
-    test(`${content}: a trigger outside the root opens the managed dialog; after a preemption, closing returns focus to it`, async ({
-      page,
-    }) => {
-      await openFixture(page, { kit: "base-ui", content });
-      await page.getByRole("button", { name: "Open user editor" }).click();
-      await expectShown(page, ["Edit user"]);
-      await page.getByLabel("Name").fill("Ada");
+  test("a trigger outside the root opens the managed dialog; after a preemption, closing returns focus to it", async ({
+    page,
+  }) => {
+    await openFixture(page, { kit: "base-ui" });
+    await page.getByRole("button", { name: "Open user editor" }).click();
+    await expectShown(page, ["Edit user"]);
+    await page.getByLabel("Name").fill("Ada");
 
-      await setOpen(page, "session-expired", true);
-      await expectShown(page, ["Session expired"]);
-      await page.keyboard.press("Escape");
-      await expectShown(page, ["Edit user"]);
-      await expect(page.getByLabel("Name")).toHaveValue("Ada");
+    await setOpen(page, "session-expired", true);
+    await expectShown(page, ["Session expired"]);
+    await page.keyboard.press("Escape");
+    await expectShown(page, ["Edit user"]);
+    await expect(page.getByLabel("Name")).toHaveValue("Ada");
 
-      await settle(page);
-      await page.keyboard.press("Escape");
-      await expectShown(page, []);
-      await expect(page.getByRole("button", { name: "Open user editor" })).toBeFocused();
-      await expectPageReleased(page);
-    });
-  }
+    await settle(page);
+    await page.keyboard.press("Escape");
+    await expectShown(page, []);
+    await expect(page.getByRole("button", { name: "Open user editor" })).toBeFocused();
+    await expectPageReleased(page);
+  });
 });

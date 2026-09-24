@@ -58,9 +58,10 @@ export function useManagedModalContext(): ManagedModalContextValue | null {
 }
 
 /**
- * Presentation of the nearest managed modal, for content components
- * (e.g. shadcn `DialogContent`) that want to keep content mounted while the
- * modal is suspended or skip focus restoration. `null` outside a managed modal.
+ * Presentation of the nearest managed modal, for content that needs to know
+ * whether its modal is on screen, queued or suspended (e.g. content rendered
+ * with Radix `forceMount` for a JS animation library). `null` outside a
+ * managed modal.
  */
 export function useModalPresentation(): ModalPresentation | null {
   return useContext(ManagedModalContext)?.presentation ?? null;

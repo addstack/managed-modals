@@ -7,31 +7,18 @@ export type ModalPresentationStatus = "idle" | ModalRequestStatus;
  * application intent (`open` passed by the app) from what may be on screen.
  */
 export type ModalPresentation = {
-  /** `idle` when the modal is closed or not registered yet. */
+  /**
+   * `idle` when the modal is closed or not registered yet. `suspended` also
+   * covers a modal that was shown and is chosen again, but waits for another
+   * modal's exit animation.
+   */
   status: ModalPresentationStatus;
-  /** Pass to the primitive's `open` prop. */
+  /** Whether the modal is on screen. */
   open: boolean;
-  /**
-   * The modal has been shown and is still wanted: keep its content mounted
-   * (Base UI `keepMounted`, Radix `forceMount`) so that a suspension does not
-   * lose its state. Stays `true` across suspend/resume to avoid remounts;
-   * becomes `false` when the modal is closed for good.
-   */
-  keepMounted: boolean;
-  /**
-   * The modal is closing because the scheduler switched to another modal, not
-   * because the user closed it. Do not move focus back to its trigger.
-   */
-  suppressFinalFocus: boolean;
   dismissReason?: ModalDismissReason;
 };
 
-export const IDLE_PRESENTATION: ModalPresentation = Object.freeze({
-  status: "idle",
-  open: false,
-  keepMounted: false,
-  suppressFinalFocus: false,
-});
+export const IDLE_PRESENTATION: ModalPresentation = Object.freeze({ status: "idle", open: false });
 
 export function getModalPresentation<Name extends string>(
   state: ModalSchedulerState<Name>,
@@ -45,33 +32,23 @@ export function getModalPresentation<Name extends string>(
     case "covered": {
       if (state.entryBlocked.includes(request.requestId)) {
         // Chosen, but waiting for another modal's exit animation.
-        return request.hasBeenPresented
-          ? { status: "suspended", open: false, keepMounted: true, suppressFinalFocus: true }
-          : { status: "pending", open: false, keepMounted: false, suppressFinalFocus: false };
+        return request.hasBeenPresented ? { status: "suspended", open: false } : { status: "pending", open: false };
       }
-      return { status: request.status, open: true, keepMounted: true, suppressFinalFocus: false };
+      return { status: request.status, open: true };
     }
     case "suspended":
-      return { status: "suspended", open: false, keepMounted: true, suppressFinalFocus: true };
+      return { status: "suspended", open: false };
     case "dismissed":
       return {
         status: "dismissed",
         open: false,
-        keepMounted: false,
-        suppressFinalFocus: request.dismissReason === "preempted",
         ...(request.dismissReason ? { dismissReason: request.dismissReason } : {}),
       };
     case "pending":
-      return { status: "pending", open: false, keepMounted: false, suppressFinalFocus: false };
+      return { status: "pending", open: false };
   }
 }
 
 export function isSamePresentation(a: ModalPresentation, b: ModalPresentation): boolean {
-  return (
-    a.status === b.status &&
-    a.open === b.open &&
-    a.keepMounted === b.keepMounted &&
-    a.suppressFinalFocus === b.suppressFinalFocus &&
-    a.dismissReason === b.dismissReason
-  );
+  return a.status === b.status && a.open === b.open && a.dismissReason === b.dismissReason;
 }

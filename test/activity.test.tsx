@@ -2,19 +2,12 @@
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import * as RadixDialog from "@radix-ui/react-dialog";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import * as React from "react";
 import { StrictMode, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { Drawer as VaulDrawer } from "vaul";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 
 import type { ModalSchedulerState } from "../src/core/index.js";
-import {
-  adapters,
-  createManagedModals,
-  ModalActivity,
-  useModalPresentation,
-  usePauseWhileSuspended,
-} from "../src/react/index.js";
+import { adapters, createManagedModals, ModalActivity, usePauseWhileSuspended } from "../src/react/index.js";
 
 beforeAll(() => {
   // vaul reads these; jsdom does not implement them.
@@ -31,9 +24,6 @@ beforeAll(() => {
 });
 
 afterEach(cleanup);
-
-// `<ModalActivity>` needs `<Activity>` (React 19.2+); before that it renders its children as they are.
-const hasActivity = "Activity" in React;
 
 const policies = {
   "session-expired": { priority: 100 },
@@ -103,7 +93,7 @@ function VaulContent({ title, children }: { title: string; children?: ReactNode 
   );
 }
 
-/** Dialogs a user can see: `<Activity>` hides with `display: none`, the `keepMounted` integration with `hidden`. */
+/** Dialogs a user can see: `<Activity>` hides with `display: none`. */
 function visibleDialogs(): string[] {
   return screen
     .queryAllByRole("dialog", { hidden: true })
@@ -121,7 +111,7 @@ function pageReleased(): boolean {
 
 // ---------------------------------------------------------------------------------
 
-describe.runIf(hasActivity)("Radix", () => {
+describe("Radix", () => {
   test("a preempted dialog is hidden with its state kept, and the page is left to the active one", async () => {
     const { ModalProvider, Dialog } = setup();
     const onOpenChange = vi.fn();
@@ -254,7 +244,7 @@ describe.runIf(hasActivity)("Radix", () => {
   });
 });
 
-describe.runIf(hasActivity)("nested modals while their flow is suspended", () => {
+describe("nested modals while their flow is suspended", () => {
   function Probe({ onState }: { onState: (state: ModalSchedulerState) => void }) {
     const { useModalSchedulerState } = shared;
     onState(useModalSchedulerState());
@@ -531,7 +521,7 @@ describe.runIf(hasActivity)("nested modals while their flow is suspended", () =>
   });
 });
 
-describe.runIf(hasActivity)("Base UI", () => {
+describe("Base UI", () => {
   test("Escape and outside presses do not close a suspended dialog, although its root stays open", async () => {
     const { ModalProvider, BaseDialogRoot } = setup();
     const onEditOpenChange = vi.fn();
@@ -570,7 +560,7 @@ describe.runIf(hasActivity)("Base UI", () => {
   });
 });
 
-describe.runIf(hasActivity)("Base UI behind a Radix dialog", () => {
+describe("Base UI behind a Radix dialog", () => {
   // Base UI listens for Escape and outside presses at its root, which stays
   // open behind a <ModalActivity>. Radix closes the dialog on top first
   // (synchronously), which brings the Base UI dialog back while the same
@@ -636,7 +626,7 @@ describe.runIf(hasActivity)("Base UI behind a Radix dialog", () => {
   });
 });
 
-describe.runIf(hasActivity)("vaul", () => {
+describe("vaul", () => {
   test("a suspended drawer keeps what was typed", async () => {
     const { ModalProvider, Dialog, Drawer } = setup();
     let setSession!: (open: boolean) => void;
@@ -714,136 +704,116 @@ describe("usePauseWhileSuspended", () => {
     return <video ref={ref} data-testid="video" />;
   }
 
-  /** The README's `keepMounted` integration for Radix. */
-  function KeepMountedContent({ title, children }: { title: string; children?: ReactNode }) {
-    const presentation = useModalPresentation();
-    const suspended = presentation?.status === "suspended";
-    return (
-      <RadixDialog.Portal {...(presentation?.keepMounted ? { forceMount: true } : {})}>
-        {!suspended && <RadixDialog.Overlay />}
-        <RadixDialog.Content aria-describedby={undefined} hidden={suspended || undefined}>
-          <RadixDialog.Title>{title}</RadixDialog.Title>
-          {children}
-        </RadixDialog.Content>
-      </RadixDialog.Portal>
+  test(`a playing video is paused while suspended and plays again from the same point (Strict Mode)`, async () => {
+    const { ModalProvider, Dialog } = setup();
+    let setSession!: (open: boolean) => void;
+
+    function App() {
+      const [session, setSessionState] = useState(false);
+      setSession = setSessionState;
+      return (
+        <ModalProvider>
+          <Dialog name="edit-user" defaultOpen>
+            <RadixContent title="Intro video">
+              <Video />
+            </RadixContent>
+          </Dialog>
+          <Dialog name="session-expired" open={session} onOpenChange={setSessionState}>
+            <RadixContent title="Session expired" />
+          </Dialog>
+        </ModalProvider>
+      );
+    }
+
+    render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
     );
-  }
+    const video = screen.getByTestId<HTMLVideoElement>("video");
+    act(() => void video.play());
+    video.currentTime = 7;
 
-  for (const [integration, Content] of [
-    ...(hasActivity ? ([["ModalActivity", RadixContent]] as const) : []),
-    ["keepMounted", KeepMountedContent],
-  ] as const) {
-    test(`${integration}: a playing video is paused while suspended and plays again from the same point (Strict Mode)`, async () => {
-      const { ModalProvider, Dialog } = setup();
-      let setSession!: (open: boolean) => void;
+    act(() => setSession(true));
+    expect(visibleDialogs()).toEqual(["Session expired"]);
+    expect(video.paused).toBe(true);
 
-      function App() {
-        const [session, setSessionState] = useState(false);
-        setSession = setSessionState;
-        return (
-          <ModalProvider>
-            <Dialog name="edit-user" defaultOpen>
-              <Content title="Intro video">
-                <Video />
-              </Content>
-            </Dialog>
-            <Dialog name="session-expired" open={session} onOpenChange={setSessionState}>
-              <Content title="Session expired" />
-            </Dialog>
-          </ModalProvider>
-        );
-      }
+    act(() => setSession(false));
+    expect(visibleDialogs()).toEqual(["Intro video"]);
+    expect(screen.getByTestId("video")).toBe(video);
+    await waitFor(() => expect(video.paused).toBe(false));
+    expect(video.currentTime).toBe(7);
+  });
 
-      render(
-        <StrictMode>
-          <App />
-        </StrictMode>,
+  test(`a video comes back at the same point even if the engine drops its position after resuming`, async () => {
+    const { ModalProvider, Dialog } = setup();
+    let setSession!: (open: boolean) => void;
+
+    function App() {
+      const [session, setSessionState] = useState(false);
+      setSession = setSessionState;
+      return (
+        <ModalProvider>
+          <Dialog name="edit-user" defaultOpen>
+            <RadixContent title="Intro video">
+              <Video />
+            </RadixContent>
+          </Dialog>
+          <Dialog name="session-expired" open={session} onOpenChange={setSessionState}>
+            <RadixContent title="Session expired" />
+          </Dialog>
+        </ModalProvider>
       );
-      const video = screen.getByTestId<HTMLVideoElement>("video");
-      act(() => void video.play());
-      video.currentTime = 7;
+    }
 
-      act(() => setSession(true));
-      expect(visibleDialogs()).toEqual(["Session expired"]);
-      expect(video.paused).toBe(true);
+    render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    );
+    const video = screen.getByTestId<HTMLVideoElement>("video");
+    act(() => void video.play());
+    video.currentTime = 12.5;
 
-      act(() => setSession(false));
-      expect(visibleDialogs()).toEqual(["Intro video"]);
-      expect(screen.getByTestId("video")).toBe(video);
-      await waitFor(() => expect(video.paused).toBe(false));
-      expect(video.currentTime).toBe(7);
-    });
+    act(() => setSession(true));
+    act(() => setSession(false));
+    await waitFor(() => expect(video.paused).toBe(false));
+    // WebKit with GStreamer: playback starts over a moment after it resumes.
+    engineDropsPosition(video);
+    expect(video.currentTime).toBe(12.5);
 
-    test(`${integration}: a video comes back at the same point even if the engine drops its position after resuming`, async () => {
-      const { ModalProvider, Dialog } = setup();
-      let setSession!: (open: boolean) => void;
+    // The user's own seek, once ours is done, is left alone.
+    await new Promise((resolve) => setTimeout(resolve));
+    video.currentTime = 3;
+    video.dispatchEvent(new Event("timeupdate"));
+    expect(video.currentTime).toBe(3);
+  });
 
-      function App() {
-        const [session, setSessionState] = useState(false);
-        setSession = setSessionState;
-        return (
-          <ModalProvider>
-            <Dialog name="edit-user" defaultOpen>
-              <Content title="Intro video">
-                <Video />
-              </Content>
-            </Dialog>
-            <Dialog name="session-expired" open={session} onOpenChange={setSessionState}>
-              <Content title="Session expired" />
-            </Dialog>
-          </ModalProvider>
-        );
-      }
+  test(`a video the user paused stays paused when the modal comes back`, () => {
+    const { ModalProvider, Dialog } = setup();
+    let setSession!: (open: boolean) => void;
 
-      render(
-        <StrictMode>
-          <App />
-        </StrictMode>,
+    function App() {
+      const [session, setSessionState] = useState(false);
+      setSession = setSessionState;
+      return (
+        <ModalProvider>
+          <Dialog name="edit-user" defaultOpen>
+            <RadixContent title="Intro video">
+              <Video />
+            </RadixContent>
+          </Dialog>
+          <Dialog name="session-expired" open={session} onOpenChange={setSessionState}>
+            <RadixContent title="Session expired" />
+          </Dialog>
+        </ModalProvider>
       );
-      const video = screen.getByTestId<HTMLVideoElement>("video");
-      act(() => void video.play());
-      video.currentTime = 12.5;
+    }
 
-      act(() => setSession(true));
-      act(() => setSession(false));
-      await waitFor(() => expect(video.paused).toBe(false));
-      // WebKit with GStreamer: playback starts over a moment after it resumes.
-      engineDropsPosition(video);
-      expect(video.currentTime).toBe(12.5);
-
-      // The user's own seek, once ours is done, is left alone.
-      await new Promise((resolve) => setTimeout(resolve));
-      video.currentTime = 3;
-      video.dispatchEvent(new Event("timeupdate"));
-      expect(video.currentTime).toBe(3);
-    });
-
-    test(`${integration}: a video the user paused stays paused when the modal comes back`, () => {
-      const { ModalProvider, Dialog } = setup();
-      let setSession!: (open: boolean) => void;
-
-      function App() {
-        const [session, setSessionState] = useState(false);
-        setSession = setSessionState;
-        return (
-          <ModalProvider>
-            <Dialog name="edit-user" defaultOpen>
-              <Content title="Intro video">
-                <Video />
-              </Content>
-            </Dialog>
-            <Dialog name="session-expired" open={session} onOpenChange={setSessionState}>
-              <Content title="Session expired" />
-            </Dialog>
-          </ModalProvider>
-        );
-      }
-
-      render(<App />);
-      const video = screen.getByTestId<HTMLVideoElement>("video");
-      act(() => setSession(true));
-      act(() => setSession(false));
-      expect(video.paused).toBe(true);
-    });
-  }
+    render(<App />);
+    const video = screen.getByTestId<HTMLVideoElement>("video");
+    act(() => setSession(true));
+    act(() => setSession(false));
+    expect(video.paused).toBe(true);
+  });
 });

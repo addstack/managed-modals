@@ -40,19 +40,6 @@ jobs:
       - run: npm run build
       - run: npm run check:package
 
-  # The oldest supported React. <ModalActivity> does nothing there; its tests are skipped.
-  test-react-18:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npm install --no-save react@18.3.1 react-dom@18.3.1
-      - run: npm test
-
   e2e:
     runs-on: ubuntu-latest
     steps:
@@ -72,7 +59,7 @@ jobs:
           retention-days: 14
 
   release:
-    needs: [test, test-react-18, e2e]
+    needs: [test, e2e]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:

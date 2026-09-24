@@ -4,27 +4,17 @@ import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import * as RadixAlertDialog from "@radix-ui/react-alert-dialog";
 import * as RadixDialog from "@radix-ui/react-dialog";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import * as React from "react";
-import { StrictMode, useRef, useState, type ComponentProps, type ComponentType, type ReactNode } from "react";
+import { StrictMode, useState, type ComponentProps, type ComponentType, type ReactNode } from "react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import type { ModalName, ModalSchedulerState } from "../src/core/index.js";
-import {
-  adapters,
-  createManagedModals,
-  ModalActivity,
-  useFocusOnResume,
-  useModalPresentation,
-  type ManagedRootProps,
-} from "../src/react/index.js";
+import { adapters, createManagedModals, ModalActivity, type ManagedRootProps } from "../src/react/index.js";
 
 // Scenarios around the scheduler that each content integration has to get
 // right: vetoed closes, assistive technology, reactive priority, unmounting,
 // double preemption, alert dialogs, content that renders while closed.
 
 afterEach(cleanup);
-
-const hasActivity = "Activity" in React;
 
 const policies = {
   "session-expired": { priority: 100 },
@@ -58,31 +48,6 @@ function RadixActivityContent({ title, children, onEscapeKeyDown }: ContentProps
   );
 }
 
-function RadixKeepMountedContent({ title, children, onEscapeKeyDown }: ContentProps) {
-  const managed = useModalPresentation();
-  const suspended = managed?.status === "suspended";
-  const ref = useRef<HTMLDivElement>(null);
-  useFocusOnResume(ref);
-  return (
-    <RadixDialog.Portal {...(managed?.keepMounted ? { forceMount: true } : {})}>
-      {!suspended && <RadixDialog.Overlay />}
-      <RadixDialog.Content
-        ref={ref}
-        aria-describedby={undefined}
-        hidden={suspended || undefined}
-        {...(onEscapeKeyDown ? { onEscapeKeyDown } : {})}
-        onCloseAutoFocus={(event) => {
-          if (managed?.suppressFinalFocus) event.preventDefault();
-        }}
-      >
-        <RadixDialog.Title>{title}</RadixDialog.Title>
-        {children}
-        <RadixDialog.Close>Close {title}</RadixDialog.Close>
-      </RadixDialog.Content>
-    </RadixDialog.Portal>
-  );
-}
-
 function BaseActivityContent({ title, children }: ContentProps) {
   return (
     <ModalActivity>
@@ -98,20 +63,6 @@ function BaseActivityContent({ title, children }: ContentProps) {
   );
 }
 
-function BaseKeepMountedContent({ title, children }: ContentProps) {
-  const managed = useModalPresentation();
-  return (
-    <BaseDialog.Portal keepMounted={managed?.keepMounted}>
-      <BaseDialog.Backdrop />
-      <BaseDialog.Popup finalFocus={managed?.suppressFinalFocus ? false : undefined}>
-        <BaseDialog.Title>{title}</BaseDialog.Title>
-        {children}
-        <BaseDialog.Close>Close {title}</BaseDialog.Close>
-      </BaseDialog.Popup>
-    </BaseDialog.Portal>
-  );
-}
-
 function setup() {
   const modals = createManagedModals({ policies });
   const radix = modals.managed(RadixDialog.Root, { kind: "dialog", adapter: adapters.radix });
@@ -121,24 +72,17 @@ function setup() {
     adapter: adapters.baseUi,
   }) as unknown as ManagedRoot;
   const kits: Kit[] = [
-    { label: "radix, activity", Root: radix, Content: RadixActivityContent },
-    { label: "base-ui, activity", Root: base, Content: BaseActivityContent },
-    { label: "radix, keep-mounted", Root: radix, Content: RadixKeepMountedContent },
-    { label: "base-ui, keep-mounted", Root: base, Content: BaseKeepMountedContent },
+    { label: "radix", Root: radix, Content: RadixActivityContent },
+    { label: "base-ui", Root: base, Content: BaseActivityContent },
   ];
   return { ...modals, kits };
 }
 
-// `<ModalActivity>` does nothing before React 19.2: its scenarios run where `<Activity>` exists.
-const kitLabels = [
-  ...(hasActivity ? ["radix, activity", "base-ui, activity"] : []),
-  "radix, keep-mounted",
-  "base-ui, keep-mounted",
-];
+const kitLabels = ["radix", "base-ui"];
 
 // --- helpers ------------------------------------------------------------------------
 
-/** Dialogs a sighted user sees: `<Activity>` hides with `display: none`, the `keepMounted` integration with `hidden`. */
+/** Dialogs a sighted user sees: `<Activity>` hides with `display: none`. */
 function visibleDialogs(role: "dialog" | "alertdialog" = "dialog"): string[] {
   return screen
     .queryAllByRole(role, { hidden: true })
@@ -518,7 +462,7 @@ describe("alert dialogs", () => {
         ),
     ],
   ] as const) {
-    test.runIf(hasActivity)(`${label}: an alert dialog is preempted and comes back with its state; outside presses do not close it`, async () => {
+    test(`${label}: an alert dialog is preempted and comes back with its state; outside presses do not close it`, async () => {
       const modals = createManagedModals({ policies });
       const AlertRoot = createRoot() as unknown as ComponentType<{
         name: "edit-user" | "session-expired";
@@ -567,7 +511,7 @@ describe("alert dialogs", () => {
 
 // --- content that renders while its root is closed ----------------------------------
 
-describe.runIf(hasActivity)("<ModalActivity> and content that renders while closed", () => {
+describe("<ModalActivity> and content that renders while closed", () => {
   test("Radix forceMount driven by the application's open state (JS animations): a queued dialog stays hidden", async () => {
     const { ModalProvider } = setup();
     const Dialog = createManagedModals({ policies }).managed(RadixDialog.Root, { kind: "dialog", adapter: adapters.radix });
@@ -628,10 +572,10 @@ describe("Base UI with keepMounted always on (the application's own choice)", ()
     );
   }
 
-  for (const withActivity of hasActivity ? [false, true] : [false]) {
+  for (const withActivity of [false, true]) {
     test(`queues, preempts and resumes with state${withActivity ? ", inside <ModalActivity>" : ""}`, async () => {
       const { kits, ModalProvider } = setup();
-      const Root = kits.find((candidate) => candidate.label === "base-ui, keep-mounted")!.Root;
+      const Root = kits.find((candidate) => candidate.label === "base-ui")!.Root;
       const Content = withActivity
         ? ({ title, children }: ContentProps) => (
             <ModalActivity>
@@ -671,37 +615,4 @@ describe("Base UI with keepMounted always on (the application's own choice)", ()
       expect(screen.getByLabelText<HTMLInputElement>("Name").value).toBe("Ada");
     });
   }
-});
-
-// --- React versions without <Activity> ------------------------------------------------
-
-describe.runIf(!hasActivity)("<ModalActivity> before React 19.2", () => {
-  test("renders its children as they are; a suspended modal unmounts its content", async () => {
-    const { ModalProvider, kits } = setup();
-    const Root = kits.find((candidate) => candidate.label === "radix, activity")!.Root;
-    let session!: ReturnType<typeof useIntent>;
-
-    function App() {
-      session = useIntent();
-      return (
-        <ModalProvider>
-          <Root name="edit-user" defaultOpen>
-            <RadixActivityContent title="Edit user">
-              <input aria-label="Name" />
-            </RadixActivityContent>
-          </Root>
-          <Root name="session-expired" open={session.open} onOpenChange={session.onOpenChange}>
-            <RadixActivityContent title="Session expired" />
-          </Root>
-        </ModalProvider>
-      );
-    }
-
-    render(<App />);
-    expect(visibleDialogs()).toEqual(["Edit user"]);
-    act(() => session.setOpen(true));
-    expect(visibleDialogs()).toEqual(["Session expired"]);
-    act(() => session.setOpen(false));
-    await waitFor(() => expect(visibleDialogs()).toEqual(["Edit user"]));
-  });
 });
