@@ -1,9 +1,9 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { StrictMode, useCallback, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { StrictMode, useCallback, useEffect, useState, type ComponentProps, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 
 import type { ModalRequest } from "../src/core/index.js";
-import { adapters, createManagedModals, useFocusOnResume, useModalPresentation } from "../src/react/index.js";
+import { adapters, createManagedModals, ModalActivity } from "../src/react/index.js";
 
 // --- lib/modals.ts ------------------------------------------------------------
 
@@ -26,29 +26,23 @@ function DialogRoot(props: ComponentProps<typeof DialogPrimitive.Root>) {
 const Dialog = managed(DialogRoot, { kind: "dialog", adapter: adapters.radix });
 
 function DialogContent({ children, className = "" }: { children: ReactNode; className?: string }) {
-  const presentation = useModalPresentation();
-  const suspended = presentation?.status === "suspended";
-  const ref = useRef<HTMLDivElement>(null);
-  useFocusOnResume(ref);
   return (
-    <DialogPrimitive.Portal {...(presentation?.keepMounted ? { forceMount: true } : {})}>
-      {!suspended && <DialogPrimitive.Overlay className="overlay" />}
-      <DialogPrimitive.Content
-        ref={ref}
-        hidden={suspended || undefined}
-        aria-describedby={undefined}
-        className={`dialog ${className}`}
-        // The playground's controls live outside the dialogs; using them must not close one.
-        onInteractOutside={(event) => {
-          if (event.target instanceof Element && event.target.closest(".panel")) event.preventDefault();
-        }}
-        onCloseAutoFocus={(event) => {
-          if (presentation?.suppressFinalFocus) event.preventDefault();
-        }}
-      >
-        {children}
-      </DialogPrimitive.Content>
-    </DialogPrimitive.Portal>
+    // Keeps a suspended dialog's state (what you typed) until it comes back.
+    <ModalActivity>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="overlay" />
+        <DialogPrimitive.Content
+          aria-describedby={undefined}
+          className={`dialog ${className}`}
+          // The playground's controls live outside the dialogs; using them must not close one.
+          onInteractOutside={(event) => {
+            if (event.target instanceof Element && event.target.closest(".panel")) event.preventDefault();
+          }}
+        >
+          {children}
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </ModalActivity>
   );
 }
 

@@ -5,10 +5,15 @@ import { dialog, expectPageReleased, expectShown, openFixture, recordWhile, setO
 // Drawers next to dialogs. The dialogs use Base UI here, so that their exits
 // are reported by the primitive and never wait for the timeout fallback.
 
-for (const drawer of ["vaul", "base-ui"] as const) {
-  test.describe(`${drawer} drawer`, () => {
+for (const [drawer, content] of [
+  ["vaul", "activity"],
+  ["vaul", "keep-mounted"],
+  ["base-ui", "activity"],
+  ["base-ui", "keep-mounted"],
+] as const) {
+  test.describe(`${drawer} drawer, ${content}`, () => {
     test("a drawer preempted by a critical dialog comes back after it and closes cleanly", async ({ page }) => {
-      await openFixture(page, { kit: "base-ui", drawer });
+      await openFixture(page, { kit: "base-ui", drawer, content });
       await page.getByRole("button", { name: "Open filters" }).click();
       await expectShown(page, ["Filters"]);
 
@@ -24,8 +29,11 @@ for (const drawer of ["vaul", "base-ui"] as const) {
     });
 
     test("a suspended drawer keeps what was typed", async ({ page }) => {
-      test.fixme(drawer === "vaul", "Keeping a suspended vaul drawer mounted is not supported yet (spec §13).");
-      await openFixture(page, { kit: "base-ui", drawer });
+      test.fixme(
+        drawer === "vaul" && content === "keep-mounted",
+        "vaul has no way to keep a closed drawer mounted; <ModalActivity> keeps it (spec §13).",
+      );
+      await openFixture(page, { kit: "base-ui", drawer, content });
       await page.getByRole("button", { name: "Open filters" }).click();
       await page.getByLabel("Search").fill("red shoes");
 
@@ -38,7 +46,7 @@ for (const drawer of ["vaul", "base-ui"] as const) {
 
     test("with awaitExit a queued dialog enters once the user-closed drawer has slid out", async ({ page }) => {
       const exitTimeoutMs = 3000;
-      await openFixture(page, { kit: "base-ui", drawer, awaitExit: true, exitTimeoutMs });
+      await openFixture(page, { kit: "base-ui", drawer, content, awaitExit: true, exitTimeoutMs });
       await page.getByRole("button", { name: "Open filters" }).click();
       await expectShown(page, ["Filters"]);
       await setOpen(page, "onboarding", true);
@@ -55,11 +63,12 @@ for (const drawer of ["vaul", "base-ui"] as const) {
 
     test("with awaitExit a critical dialog enters once the preempted drawer has slid out", async ({ page }) => {
       test.fail(
-        drawer === "vaul",
-        "vaul calls onAnimationEnd only for closes it started itself, so a scheduler switch waits for exitTimeoutMs.",
+        drawer === "vaul" && content === "keep-mounted",
+        "vaul calls onAnimationEnd only for closes it started itself, so a scheduler switch waits for exitTimeoutMs. " +
+          "With <ModalActivity> the drawer is hidden at once and its exit completes right away.",
       );
       const exitTimeoutMs = 3000;
-      await openFixture(page, { kit: "base-ui", drawer, awaitExit: true, exitTimeoutMs });
+      await openFixture(page, { kit: "base-ui", drawer, content, awaitExit: true, exitTimeoutMs });
       await page.getByRole("button", { name: "Open filters" }).click();
       await expectShown(page, ["Filters"]);
 

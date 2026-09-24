@@ -9,6 +9,7 @@ import {
   expectShown,
   focusedDialog,
   openFixture,
+  recordWhile,
   setOpen,
 } from "./fixture.js";
 
@@ -16,10 +17,15 @@ import {
 // the content integration from the README. Scheduling order itself is covered
 // by the unit tests in test/.
 
-for (const kit of ["radix", "base-ui"] as const) {
-  test.describe(`${kit} dialogs`, () => {
+for (const [kit, content] of [
+  ["radix", "activity"],
+  ["radix", "keep-mounted"],
+  ["base-ui", "activity"],
+  ["base-ui", "keep-mounted"],
+] as const) {
+  test.describe(`${kit} dialogs, ${content}`, () => {
     test.beforeEach(async ({ page }) => {
-      await openFixture(page, { kit });
+      await openFixture(page, { kit, content });
     });
 
     test("a preempted dialog keeps its fields and gets focus back when it resumes", async ({ page }) => {
@@ -36,11 +42,11 @@ for (const kit of ["radix", "base-ui"] as const) {
       await expectShown(page, ["Edit user"]);
       await expect(page.getByLabel("Name")).toHaveValue("Ada");
       await expect(page.getByLabel("Email")).toHaveValue("ada@example.com");
-      if (kit === "radix") {
+      if (kit === "radix" && content === "keep-mounted") {
         // useFocusOnResume restores the field that had focus before the suspension.
         await expect(page.getByLabel("Email")).toBeFocused();
       } else {
-        // Base UI focuses the dialog's initial focus target again: its first field.
+        // The primitive focuses the dialog's initial focus target again, as on open: its first field.
         await expect(page.getByLabel("Name")).toBeFocused();
       }
 
@@ -53,8 +59,8 @@ for (const kit of ["radix", "base-ui"] as const) {
 
     test("a resumed dialog can be used with the mouse", async ({ page }) => {
       test.fail(
-        kit === "radix",
-        "The README's Radix integration unmounts the overlay while suspended. Radix portals the overlay on its own, " +
+        kit === "radix" && content === "keep-mounted",
+        "The README's Radix keepMounted integration unmounts the overlay while suspended. Radix portals the overlay on its own, " +
           "so on resume it is appended to the end of <body>, above the content, and the first click closes the dialog.",
       );
       await page.getByRole("button", { name: "Edit user" }).click();
@@ -170,7 +176,7 @@ for (const kit of ["radix", "base-ui"] as const) {
 
     test("focus goes to the nested dialog on top when a preempted nested flow comes back", async ({ page }) => {
       test.fail(
-        true,
+        content === "keep-mounted",
         kit === "radix"
           ? "useFocusOnResume in the covered parent pulls focus out of the resumed nested dialog."
           : "Base UI focuses the parent when a parent and its nested dialog reopen in the same commit.",
@@ -184,6 +190,54 @@ for (const kit of ["radix", "base-ui"] as const) {
       await page.keyboard.press("Escape");
       await expectShown(page, ["Edit user", "Really delete?"]);
       await expect.poll(() => focusedDialog(page), { timeout: 2000 }).toBe("Really delete?");
+    });
+
+    test("a suspended dialog keeps its scroll position", async ({ page }) => {
+      await setOpen(page, "billing", true);
+      await expectShown(page, ["Billing"]);
+      const terms = page.getByRole("region", { name: "Payment terms" });
+      // As a user scrolls: the scroll has happened (and its event fired) before anything else.
+      await terms.evaluate(
+        (element) =>
+          new Promise<void>((resolve) => {
+            element.addEventListener("scroll", () => resolve(), { once: true });
+            element.scrollTo(0, 200);
+          }),
+      );
+
+      await setOpen(page, "session-expired", true);
+      await expectShown(page, ["Session expired"]);
+      await page.keyboard.press("Escape");
+      await expectShown(page, ["Billing"]);
+      // Within a pixel: Firefox reports fractional positions.
+      expect(await terms.evaluate((element) => element.scrollTop)).toBeCloseTo(200, -0.3);
+    });
+
+    test("a suspended dialog that the application closes never shows up again, not even while it animates out", async ({
+      page,
+    }) => {
+      await page.getByRole("button", { name: "Edit user" }).click();
+      await expectShown(page, ["Edit user"]);
+      await setOpen(page, "session-expired", true);
+      await expectShown(page, ["Session expired"]);
+
+      const recording = await recordWhile(page, () => setOpen(page, "edit-user", false), ["Session expired"]);
+      await page.waitForTimeout(500);
+      expect(recording.together("Edit user")).toEqual([]);
+      await expectShown(page, ["Session expired"]);
+    });
+
+    test("a resumed nested flow exposes the nested dialog to assistive technology, not its parent", async ({ page }) => {
+      await page.getByRole("button", { name: "Edit user" }).click();
+      await dialog(page, "Edit user").getByRole("button", { name: "Delete user" }).click();
+      await expectShown(page, ["Edit user", "Really delete?"]);
+      await setOpen(page, "session-expired", true);
+      await expectShown(page, ["Session expired"]);
+
+      await page.keyboard.press("Escape");
+      await expectShown(page, ["Edit user", "Really delete?"]);
+      await expect(page.getByRole("dialog", { name: "Really delete?" })).toBeVisible();
+      await expect(page.getByRole("dialog", { name: "Edit user" })).toHaveCount(0);
     });
 
     test('a dialog dismissed by preemption ("onPreempt: dismiss") does not pull focus back to its trigger', async ({

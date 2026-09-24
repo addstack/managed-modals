@@ -142,3 +142,10 @@ label {
     opacity: 0;
   }
 }
+
+/* A scrollable region inside a dialog, for scroll position checks. */
+.terms {
+  max-height: 80px;
+  overflow: auto;
+  border: 1px solid #ddd;
+}

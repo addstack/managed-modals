@@ -18,9 +18,11 @@ export {
   type ManagedRootOwnProps,
   type ManagedRootProps,
 } from "./managed.js";
+export { ModalActivity } from "./modal-activity.js";
 export { useFocusOnResume } from "./use-focus-on-resume.js";
 export {
   useManagedModal,
   type UseManagedModalOptions,
   type UseManagedModalResult,
 } from "./use-managed-modal.js";
+export { usePauseWhileSuspended } from "./use-pause-while-suspended.js";

@@ -129,7 +129,7 @@ Do the same in the other files you use:
 > - A modal that is queued or suspended keeps `open === true` in your state. `onOpenChange(false)` is **not** called when the scheduler hides it.
 > - `onOpenChange(false)` is called when the user closes the modal, or when the scheduler **dismisses** it for good (see `onPreempt`, `whenBlocked`, `maxWaitMs`, `unique`). `onDismiss(reason)` is called right before, so you can tell the two apart.
 
-**Next steps:** keep a preempted modal's form state with [a few lines in `DialogContent`](#-keeping-a-suspended-modals-state), or serialize exit animations with [`awaitExit`](#-waiting-for-exit-animations-awaitexit).
+**Next steps:** keep a preempted modal's state (forms, scroll, a playing video) with [one more line in `DialogContent`](#-keeping-a-suspended-modals-state), or serialize exit animations with [`awaitExit`](#-waiting-for-exit-animations-awaitexit).
 
 ---
 
@@ -167,9 +167,49 @@ An instance can override the policy with `priority={95}` (reactive) or `policy={
 
 ### 💾 Keeping a suspended modal's state
 
-When a modal is preempted, its content must stay mounted to keep form state and scroll position. The primitives support this at the *content* level, so add a few lines to the content component in the same `components/ui/*.tsx` file as the root. `useModalPresentation()` returns `null` outside a managed modal, so the same component keeps working for unmanaged dialogs.
+When a modal is preempted, its content has to stay alive to keep form state, scroll position or a playing video. On React 19.2+, wrap the portal in your content component with `<ModalActivity>`:
 
-#### Base UI (shadcn `dialog.tsx`)
+```diff
+ // components/ui/dialog.tsx
++import { ModalActivity } from "@addstack/managed-modals/react";
+
+ function DialogContent({ className, children, ...props }: React.ComponentProps<typeof DialogPrimitive.Content>) {
+   return (
++    <ModalActivity>
+       <DialogPortal data-slot="dialog-portal">
+         <DialogOverlay />
+         <DialogPrimitive.Content data-slot="dialog-content" className={cn(/* … */, className)} {...props}>
+           {children}
+         </DialogPrimitive.Content>
+       </DialogPortal>
++    </ModalActivity>
+   );
+ }
+```
+
+The same line works in `alert-dialog.tsx`, `sheet.tsx` and `drawer.tsx`, on Radix, Base UI and vaul. While the modal is suspended, React's [`<Activity>`](https://react.dev/reference/react/Activity) hides the content and cleans up its effects (focus trap, scroll lock, `aria-hidden` on the page) but keeps its state and DOM. When the modal comes back, it is shown again as it was, with focus on its first field, as when it opens. Outside a managed modal, `<ModalActivity>` renders its children as they are.
+
+It also hides the content of a modal that is waiting in the queue. Content that renders while its root is closed therefore waits its turn too: Radix `forceMount`, Base UI `keepMounted`, or an animation library such as Motion driven by your own `open` state.
+
+> [!TIP]
+> Hidden media keeps playing, and is heard. Add `usePauseWhileSuspended` to your video or audio component: it pauses while the modal is suspended and plays on from the same point when it comes back, if it was playing.
+>
+> ```tsx
+> function Video(props: React.ComponentProps<"video">) {
+>   const ref = React.useRef<HTMLVideoElement>(null);
+>   usePauseWhileSuspended(ref);
+>   return <video ref={ref} {...props} />;
+> }
+> ```
+
+Without `<ModalActivity>` everything still works: a suspended modal unmounts its content, and local state is lost unless you lift it.
+
+<details>
+<summary><b>React 18 – 19.1:</b> the <code>keepMounted</code> integration</summary>
+
+`<Activity>` needs React 19.2. On older versions, `<ModalActivity>` does nothing, and each primitive keeps its content mounted at the content level instead. `useModalPresentation()` returns `null` outside a managed modal, so the same component keeps working for unmanaged dialogs. vaul has no way to keep a closed drawer mounted, so a suspended vaul drawer loses its state here.
+
+##### Base UI (shadcn `dialog.tsx`)
 
 ```tsx
 import { useModalPresentation } from "@addstack/managed-modals/react";
@@ -194,7 +234,7 @@ function DialogContent({ className, children, ...props }: DialogPrimitive.Popup.
 
 The same applies to Base UI `AlertDialog` and `Drawer`.
 
-#### Radix (shadcn `dialog.tsx`, also `sheet.tsx` and `alert-dialog.tsx`)
+##### Radix (shadcn `dialog.tsx`, also `sheet.tsx` and `alert-dialog.tsx`)
 
 ```tsx
 import { useFocusOnResume, useModalPresentation } from "@addstack/managed-modals/react";
@@ -230,8 +270,7 @@ function DialogContent({ className, children, onCloseAutoFocus, ...props }: Reac
 > [!WARNING]
 > On Tailwind v4 the preflight hides `[hidden]` even on `grid`/`flex` elements. On Tailwind v3, also add the `hidden` class while `suspended`.
 
-> [!TIP]
-> Without these changes everything still works. A suspended modal just unmounts its content, and local state is lost unless you lift it.
+</details>
 
 ### 🎬 Waiting for exit animations (`awaitExit`)
 
@@ -267,7 +306,7 @@ function MyModal({ open, onClose }: { open: boolean; onClose: () => void }) {
 }
 ```
 
-`modal.presentation` is `{ status, open, keepMounted, suppressFinalFocus, dismissReason? }`. `status` is one of `idle`, `pending`, `active`, `covered` (on screen under a nested child), `suspended` or `dismissed`.
+`modal.rootOpen` is the value for your primitive's `open` prop: it stays `true` while the modal is suspended behind a `<ModalActivity>`. `modal.presentation` is `{ status, open, keepMounted, suppressFinalFocus, dismissReason? }`. `status` is one of `idle`, `pending`, `active`, `covered` (on screen under a nested child), `suspended` or `dismissed`.
 
 ### 🔧 Core (no React)
 
@@ -300,9 +339,10 @@ function ModalDebugger() {
 
 - **SSR / RSC.** The React entry is marked `"use client"`, and so should be `lib/modals.ts`: `createManagedModals()` runs on the client. Managed modals render closed on the server and open after hydration.
 - **Strict Mode.** Double-invoked effects are handled. A nested modal may register before its parent (React runs child effects first); it waits for the parent instead of failing.
-- **Focus.** Base UI moves focus back into a resumed dialog by itself. For Radix, use `useFocusOnResume` as shown above: it restores the element that had focus before the suspension.
+- **Scroll.** Scroll positions inside a suspended dialog are kept. Firefox resets them while the content is hidden; they are put back when the modal comes back.
+- **Focus.** With `<ModalActivity>`, a resumed dialog gets focus the way it does when it opens (its first field), and a resumed nested flow focuses the nested dialog on top. With the `keepMounted` integration, Base UI does the same by itself, and on Radix `useFocusOnResume` restores the element that had focus before the suspension.
 - **Playground.** `npm run playground` runs the [playground](https://addstack.github.io/managed-modals/) against your local `src/`.
-- **Tested with** React 18.3 and 19.3, `@radix-ui/react-dialog` 1.1, `@base-ui/react` 1.8 and vaul 1.1, in jsdom, and in Chromium, Firefox and WebKit with Playwright for focus, keyboard, pointer and exit animations.
+- **Tested with** React 19.3 and, for everything but `<ModalActivity>`, React 18.3, `@radix-ui/react-dialog` 1.1, `@base-ui/react` 1.8 and vaul 1.1, in jsdom, and in Chromium, Firefox and WebKit with Playwright for focus, keyboard, pointer, exit animations and media playback.
 
 ## 📄 License
 

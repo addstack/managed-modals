@@ -73,6 +73,7 @@
   "devDependencies": {
     "@base-ui/react": "^1.8.0",
     "@playwright/test": "^1.63.0",
+    "@radix-ui/react-alert-dialog": "^1.1.23",
     "@radix-ui/react-dialog": "^1.1.23",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",

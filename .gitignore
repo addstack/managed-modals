@@ -5,3 +5,4 @@ test-results/
 playwright-report/
 blob-report/
 playground/dist/
+.claude/settings.local.json

@@ -2,7 +2,7 @@ import { useLayoutEffect, useState } from "react";
 
 import type { ModalDismissReason } from "../../src/core/index.js";
 import { logEvent, registerIntent } from "./harness.js";
-import { BaseDrawerModal, BaseModal, modals, options, RadixModal, VaulModal } from "./modals.js";
+import { BaseDrawerModal, BaseModal, modals, options, RadixModal, VaulModal, Video } from "./modals.js";
 
 export const store = modals.manager.createStore();
 
@@ -35,13 +35,14 @@ export function App() {
   const filters = useIntent("filters");
   const sessionExpired = useIntent("session-expired");
   const billing = useIntent("billing");
+  const introVideo = useIntent("intro-video");
 
   return (
     <modals.ModalProvider store={store}>
       <main>
         <h1>managed-modals fixture</h1>
         <p>
-          Dialogs: {options.kit}. Drawers: {options.drawer}.
+          Dialogs: {options.kit}. Drawers: {options.drawer}. Content: {options.content}.
         </p>
         <div className="toolbar">
           <Dialog name="edit-user" {...editUser} title="Edit user" trigger="Edit user">
@@ -64,6 +65,9 @@ export function App() {
           <Dialog name="onboarding" {...onboarding} title="Onboarding" trigger="Start onboarding">
             <p>Welcome aboard.</p>
           </Dialog>
+          <Dialog name="intro-video" {...introVideo} title="Intro video" trigger="Watch intro">
+            <Video />
+          </Dialog>
           <Drawer name="filters" {...filters} title="Filters" trigger="Open filters">
             <label>
               Search
@@ -85,6 +89,11 @@ export function App() {
         </Dialog>
         <Dialog name="billing" {...billing} title="Billing">
           <p>Your last payment failed.</p>
+          <div className="terms" tabIndex={0} role="region" aria-label="Payment terms">
+            {Array.from({ length: 30 }, (_, index) => (
+              <p key={index}>Clause {index + 1}. Payments are due on the first day of each month.</p>
+            ))}
+          </div>
         </Dialog>
         <div className="spacer" />
       </main>

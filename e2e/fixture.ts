@@ -47,6 +47,8 @@ export function dialog(page: Page, title: string): Locator {
  * overlay that covers the element to go away.
  */
 export async function clickWhereShown(page: Page, locator: Locator): Promise<void> {
+  // A user cannot click within the few milliseconds of an enter animation; under load a test can.
+  await page.evaluate(() => Promise.allSettled(document.getAnimations().map((animation) => animation.finished)));
   const box = await locator.boundingBox();
   if (!box) throw new Error("The element is not rendered.");
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);

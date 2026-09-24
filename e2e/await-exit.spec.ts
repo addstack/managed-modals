@@ -62,9 +62,14 @@ test.describe("with awaitExit", () => {
     expect(recording.appearedAfter("Onboarding")).toBeGreaterThanOrEqual(exitTimeoutMs);
   });
 
-  for (const kit of ["radix", "base-ui"] as const) {
-    test(`${kit}: preemption and resume never show both flows at once`, async ({ page }) => {
-      await openFixture(page, { kit, awaitExit: true, exitTimeoutMs: 800 });
+  for (const [kit, content] of [
+    ["radix", "activity"],
+    ["radix", "keep-mounted"],
+    ["base-ui", "activity"],
+    ["base-ui", "keep-mounted"],
+  ] as const) {
+    test(`${kit}, ${content}: preemption and resume never show both flows at once`, async ({ page }) => {
+      await openFixture(page, { kit, content, awaitExit: true, exitTimeoutMs: 800 });
       await page.getByRole("button", { name: "Edit user" }).click();
       await expectShown(page, ["Edit user"]);
 
@@ -74,6 +79,9 @@ test.describe("with awaitExit", () => {
       const resume = await recordWhile(page, () => page.keyboard.press("Escape"), ["Edit user"]);
       expect(resume.together("Edit user", "Session expired")).toEqual([]);
     });
+  }
+
+  for (const kit of ["radix", "base-ui"] as const) {
 
     test(`${kit}: a nested dialog opens and closes over its parent without waiting or hiding it`, async ({ page }) => {
       const exitTimeoutMs = 10_000;

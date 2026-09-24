@@ -117,12 +117,14 @@ export function createManagedRoot<P extends object, Name extends string = string
       },
     });
 
-    const presentedOpen = modal.presentation.open;
+    const visible = modal.presentation.open;
     const handleOpenChange = (next: boolean, ...rest: unknown[]) => {
       // A trigger pressed while the modal is already queued.
       if (next === intent) return;
-      // The primitive echoing a close that the scheduler caused.
-      if (!next && !presentedOpen) return;
+      // The primitive echoing a close that the scheduler caused, or closing a
+      // modal that is hidden behind a <ModalActivity> (Base UI listens for
+      // Escape and outside presses at the root, which stays open).
+      if (!next && !visible) return;
       setIntent(next, ...rest);
     };
 
@@ -130,7 +132,7 @@ export function createManagedRoot<P extends object, Name extends string = string
 
     return (
       <ManagedModalContext.Provider value={modal.contextValue}>
-        <RootComponent {...rootProps} {...adapterProps} open={presentedOpen} onOpenChange={handleOpenChange} />
+        <RootComponent {...rootProps} {...adapterProps} open={modal.rootOpen} onOpenChange={handleOpenChange} />
       </ManagedModalContext.Provider>
     );
   }

@@ -17,9 +17,26 @@ export type ManagedModalContextValue = {
    * `awaitExit`; adapters for Base UI and vaul call it for you.
    */
   onExitComplete: () => void;
+  /**
+   * Called by `<ModalActivity>` with its own id. Returns the unregister
+   * function. While a boundary is registered, a suspended modal stays open
+   * in the primitive and the boundary hides its content.
+   */
+  registerActivity: (id: string) => () => void;
 };
 
 export const ManagedModalContext = createContext<ManagedModalContextValue | null>(null);
+
+/**
+ * Set by `<ModalActivity>` for its content. `"hidden"` while the boundary
+ * hides it, `"revealing"` for the commit in which it comes back.
+ *
+ * React cleans up effects in hidden content as if it unmounted, so a managed
+ * modal nested in it leaves the scheduler and registers again when it is
+ * revealed. In between, it keeps its primitive open instead of closing it.
+ */
+export type ActivityState = "visible" | "hidden" | "revealing";
+export const ActivityStateContext = createContext<ActivityState>("visible");
 
 /** The nearest managed modal, or `null` when rendered outside of one. */
 export function useManagedModalContext(): ManagedModalContextValue | null {

@@ -19,9 +19,17 @@ import {
   type ModalPolicyOverrides,
   type ModalPresentation,
 } from "../core/index.js";
-import { ManagedModalContext, useModalStore, type ManagedModalContextValue } from "./context.js";
+import { ActivityStateContext, ManagedModalContext, useModalStore, type ManagedModalContextValue } from "./context.js";
+import { restoreScrollPositions } from "./scroll-positions.js";
 
 export const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+const CLOSING_SUSPENDED: ModalPresentation = Object.freeze({
+  status: "suspended",
+  open: false,
+  keepMounted: false,
+  suppressFinalFocus: true,
+});
 
 export type UseManagedModalOptions<Name extends string = string> = {
   /** Policy name. */
@@ -48,6 +56,12 @@ export type UseManagedModalOptions<Name extends string = string> = {
 export type UseManagedModalResult = {
   requestId: string | null;
   presentation: ModalPresentation;
+  /**
+   * Value for the primitive's `open` prop: `presentation.open`, and also
+   * `true` while the modal is suspended behind a `<ModalActivity>`, which
+   * hides the content and keeps its state.
+   */
+  rootOpen: boolean;
   onExitComplete: () => void;
   /** Provide through `ManagedModalContext` so nested modals and content can find it. */
   contextValue: ManagedModalContextValue;
@@ -85,11 +99,26 @@ export function useManagedModal<Name extends string = string>(
 
   const lastRequestIdRef = useRef<string | null>(null);
 
-  const presentation = useSyncExternalStore(
+  const storePresentation = useSyncExternalStore(
     store.subscribe,
     () => store.getPresentation(requestId),
     () => IDLE_PRESENTATION,
   );
+
+  // A suspended modal that the application closes must not show up while its
+  // primitive takes the content down: Radix would play the exit animation of
+  // content the `keepMounted` integration was hiding. For that one commit the
+  // content still reads the modal as suspended, no longer kept mounted.
+  const [previousStatus, setPreviousStatus] = useState(storePresentation.status);
+  const [closingSuspended, setClosingSuspended] = useState(false);
+  if (storePresentation.status !== previousStatus) {
+    setPreviousStatus(storePresentation.status);
+    if (previousStatus === "suspended" && requestId === null) setClosingSuspended(true);
+  }
+  useIsomorphicLayoutEffect(() => {
+    if (closingSuspended) setClosingSuspended(false);
+  }, [closingSuspended]);
+  const presentation = closingSuspended ? CLOSING_SUSPENDED : storePresentation;
 
   useIsomorphicLayoutEffect(() => {
     if (!requestId) return;
@@ -119,21 +148,63 @@ export function useManagedModal<Name extends string = string>(
     [store],
   );
 
+  // Coming back from a suspension: put back scroll positions the browser lost
+  // while the content was hidden (Firefox). Nested content revealed a commit
+  // later, or a primitive that shows its content a frame later, is caught by
+  // the frame callback.
+  const suspendedRef = useRef(false);
+  useIsomorphicLayoutEffect(() => {
+    if (storePresentation.status === "suspended") {
+      suspendedRef.current = true;
+      return;
+    }
+    if (!suspendedRef.current || !storePresentation.open) return;
+    suspendedRef.current = false;
+    restoreScrollPositions();
+    const frame = requestAnimationFrame(restoreScrollPositions);
+    return () => cancelAnimationFrame(frame);
+  }, [storePresentation]);
+
   const handledDismissRef = useRef<string | null>(null);
   useEffect(() => {
-    if (presentation.status !== "dismissed" || !requestId || handledDismissRef.current === requestId) return;
+    if (storePresentation.status !== "dismissed" || !requestId || handledDismissRef.current === requestId) return;
     handledDismissRef.current = requestId;
-    latest.current.onDismiss?.(presentation.dismissReason ?? "blocked");
-  }, [presentation, requestId]);
+    latest.current.onDismiss?.(storePresentation.dismissReason ?? "blocked");
+  }, [storePresentation, requestId]);
 
   const onExitComplete = useCallback(() => {
     if (lastRequestIdRef.current) store.exitComplete(lastRequestIdRef.current);
   }, [store]);
 
+  // `<ModalActivity>` boundaries in the content. While one is there, a
+  // suspended modal stays open in the primitive and the boundary hides it.
+  const [activities, setActivities] = useState<ReadonlySet<string>>(() => new Set());
+  const registerActivity = useCallback((id: string) => {
+    setActivities((current) => (current.has(id) ? current : new Set(current).add(id)));
+    return () =>
+      setActivities((current) => {
+        if (!current.has(id)) return current;
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
+  }, []);
+  // Inside a hidden <ModalActivity> this modal's effects are cleaned up and
+  // its request cancelled; keep the primitive as it was until it is back.
+  const activityState = useContext(ActivityStateContext);
+  const lastRootOpenRef = useRef(false);
+  const rootOpen =
+    activityState !== "visible" && requestId !== null && storePresentation.status === "idle"
+      ? lastRootOpenRef.current
+      : storePresentation.open || (storePresentation.status === "suspended" && activities.size > 0);
+  useIsomorphicLayoutEffect(() => {
+    lastRootOpenRef.current = rootOpen;
+  });
+
   const contextValue = useMemo<ManagedModalContextValue>(
-    () => ({ requestId, name: options.name, kind, presentation, onExitComplete }),
-    [requestId, options.name, kind, presentation, onExitComplete],
+    () => ({ requestId, name: options.name, kind, presentation, onExitComplete, registerActivity }),
+    [requestId, options.name, kind, presentation, onExitComplete, registerActivity],
   );
 
-  return { requestId, presentation, onExitComplete, contextValue };
+  return { requestId, presentation, rootOpen, onExitComplete, contextValue };
 }

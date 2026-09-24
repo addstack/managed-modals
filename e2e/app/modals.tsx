@@ -5,7 +5,14 @@ import { useRef, type ComponentProps, type ReactNode } from "react";
 import { Drawer as VaulDrawer } from "vaul";
 
 import type { ModalDismissReason, ModalName as PolicyName } from "../../src/core/index.js";
-import { adapters, createManagedModals, useFocusOnResume, useModalPresentation } from "../../src/react/index.js";
+import {
+  adapters,
+  createManagedModals,
+  ModalActivity,
+  useFocusOnResume,
+  useModalPresentation,
+  usePauseWhileSuspended,
+} from "../../src/react/index.js";
 import { fromSearch } from "./options.js";
 
 export const options = fromSearch(window.location.search);
@@ -18,6 +25,7 @@ const policies = {
   "delete-confirm": { priority: 10 },
   filters: { priority: 30 },
   onboarding: { priority: 10, onPreempt: "dismiss" },
+  "intro-video": { priority: 40 },
 } as const;
 
 export type ModalName = PolicyName<typeof policies>;
@@ -56,8 +64,28 @@ export function RadixModal({ title, trigger, children, ...root }: ModalProps) {
   );
 }
 
-/** shadcn/ui `DialogContent` on Radix, with the changes from the README. */
-function RadixContent({ title, children }: ContentProps) {
+function RadixContent(props: ContentProps) {
+  return options.content === "activity" ? <RadixActivityContent {...props} /> : <RadixKeepMountedContent {...props} />;
+}
+
+/** shadcn/ui `DialogContent` on Radix, with the one-line `<ModalActivity>` integration from the README. */
+function RadixActivityContent({ title, children }: ContentProps) {
+  return (
+    <ModalActivity>
+      <RadixDialog.Portal>
+        <RadixDialog.Overlay className="overlay" />
+        <RadixDialog.Content className="popup" aria-describedby={undefined}>
+          <RadixDialog.Title>{title}</RadixDialog.Title>
+          {children}
+          <RadixDialog.Close>Close</RadixDialog.Close>
+        </RadixDialog.Content>
+      </RadixDialog.Portal>
+    </ModalActivity>
+  );
+}
+
+/** shadcn/ui `DialogContent` on Radix, with the `keepMounted` integration from the README. */
+function RadixKeepMountedContent({ title, children }: ContentProps) {
   const managed = useModalPresentation();
   const suspended = managed?.status === "suspended";
   const contentRef = useRef<HTMLDivElement>(null);
@@ -98,8 +126,28 @@ export function BaseModal({ title, trigger, children, ...root }: ModalProps) {
   );
 }
 
-/** shadcn/ui `DialogContent` on Base UI, with the changes from the README. */
-function BaseContent({ title, children }: ContentProps) {
+function BaseContent(props: ContentProps) {
+  return options.content === "activity" ? <BaseActivityContent {...props} /> : <BaseKeepMountedContent {...props} />;
+}
+
+/** shadcn/ui `DialogContent` on Base UI, with the one-line `<ModalActivity>` integration from the README. */
+function BaseActivityContent({ title, children }: ContentProps) {
+  return (
+    <ModalActivity>
+      <BaseDialog.Portal>
+        <BaseDialog.Backdrop className="overlay" />
+        <BaseDialog.Popup className="popup">
+          <BaseDialog.Title>{title}</BaseDialog.Title>
+          {children}
+          <BaseDialog.Close>Close</BaseDialog.Close>
+        </BaseDialog.Popup>
+      </BaseDialog.Portal>
+    </ModalActivity>
+  );
+}
+
+/** shadcn/ui `DialogContent` on Base UI, with the `keepMounted` integration from the README. */
+function BaseKeepMountedContent({ title, children }: ContentProps) {
   const managed = useModalPresentation();
   return (
     <BaseDialog.Portal keepMounted={managed?.keepMounted}>
@@ -117,19 +165,25 @@ function BaseContent({ title, children }: ContentProps) {
 
 const VaulRoot = modals.managed(VaulDrawer.Root, { kind: "drawer", adapter: adapters.vaul });
 
-/** shadcn/ui `Drawer` (vaul), unchanged: keeping a suspended vaul drawer mounted is not supported yet. */
+/**
+ * shadcn/ui `Drawer` (vaul). With `<ModalActivity>` a suspended drawer keeps
+ * its state; without it (the `keepMounted` setup) vaul has no way to keep it.
+ */
 export function VaulModal({ title, trigger, children, ...root }: ModalProps) {
+  const portal = (
+    <VaulDrawer.Portal>
+      <VaulDrawer.Overlay className="drawer-overlay" />
+      <VaulDrawer.Content className="drawer" aria-describedby={undefined}>
+        <VaulDrawer.Title>{title}</VaulDrawer.Title>
+        {children}
+        <VaulDrawer.Close>Close</VaulDrawer.Close>
+      </VaulDrawer.Content>
+    </VaulDrawer.Portal>
+  );
   return (
     <VaulRoot {...root}>
       {trigger !== undefined && <VaulDrawer.Trigger>{trigger}</VaulDrawer.Trigger>}
-      <VaulDrawer.Portal>
-        <VaulDrawer.Overlay className="drawer-overlay" />
-        <VaulDrawer.Content className="drawer" aria-describedby={undefined}>
-          <VaulDrawer.Title>{title}</VaulDrawer.Title>
-          {children}
-          <VaulDrawer.Close>Close</VaulDrawer.Close>
-        </VaulDrawer.Content>
-      </VaulDrawer.Portal>
+      {options.content === "activity" ? <ModalActivity>{portal}</ModalActivity> : portal}
     </VaulRoot>
   );
 }
@@ -150,7 +204,28 @@ export function BaseDrawerModal({ title, trigger, children, ...root }: ModalProp
   );
 }
 
-function BaseDrawerContent({ title, children }: ContentProps) {
+function BaseDrawerContent(props: ContentProps) {
+  if (options.content === "keep-mounted") return <BaseDrawerKeepMountedContent {...props} />;
+  const { title, children } = props;
+  return (
+    <ModalActivity>
+      <BaseDrawer.Portal>
+        <BaseDrawer.Backdrop className="drawer-overlay" />
+        <BaseDrawer.Viewport>
+          <BaseDrawer.Popup className="drawer">
+            <BaseDrawer.Content>
+              <BaseDrawer.Title>{title}</BaseDrawer.Title>
+              {children}
+              <BaseDrawer.Close>Close</BaseDrawer.Close>
+            </BaseDrawer.Content>
+          </BaseDrawer.Popup>
+        </BaseDrawer.Viewport>
+      </BaseDrawer.Portal>
+    </ModalActivity>
+  );
+}
+
+function BaseDrawerKeepMountedContent({ title, children }: ContentProps) {
   const managed = useModalPresentation();
   return (
     <BaseDrawer.Portal keepMounted={managed?.keepMounted}>
@@ -165,5 +240,24 @@ function BaseDrawerContent({ title, children }: ContentProps) {
         </BaseDrawer.Popup>
       </BaseDrawer.Viewport>
     </BaseDrawer.Portal>
+  );
+}
+
+// --- media ------------------------------------------------------------------
+
+/** A video that pauses while its modal is suspended and plays on from the same point afterwards. */
+export function Video() {
+  const ref = useRef<HTMLVideoElement>(null);
+  usePauseWhileSuspended(ref);
+  return (
+    <>
+      <video ref={ref} aria-label="Intro video" muted playsInline loop width={160} height={90}>
+        <source src="./clip.webm" type="video/webm" />
+        <source src="./clip.mp4" type="video/mp4" />
+      </video>
+      <button type="button" onClick={() => void ref.current?.play()}>
+        Play video
+      </button>
+    </>
   );
 }

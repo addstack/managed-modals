@@ -12,6 +12,7 @@ import {
   type ModalSchedulerStore,
 } from "../core/index.js";
 import { ModalStoreContext, useModalStore } from "./context.js";
+import { rememberScrollPositions } from "./scroll-positions.js";
 import { createManagedRoot, type ManagedOptions, type ManagedRootProps } from "./managed.js";
 import { useManagedModal, type UseManagedModalOptions, type UseManagedModalResult } from "./use-managed-modal.js";
 
@@ -57,6 +58,7 @@ export function createManagedModals<const Policies extends ModalPolicies>(
   function ModalProvider({ children, store }: ModalProviderProps<Name>) {
     const [ownStore] = useState(() => store ?? manager.createStore());
     useEffect(() => () => ownStore.dispose(), [ownStore]);
+    useEffect(() => rememberScrollPositions(document), []);
     return (
       <ModalStoreContext.Provider value={ownStore as unknown as ModalSchedulerStore<string>}>{children}</ModalStoreContext.Provider>
     );
