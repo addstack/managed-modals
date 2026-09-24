@@ -41,6 +41,11 @@ export function dialog(page: Page, title: string): Locator {
   return page.getByRole("dialog", { name: title, includeHidden: true });
 }
 
+/** Waits until running animations (e.g. a resumed dialog's enter animation) have finished, as a user would. */
+export async function settle(page: Page): Promise<void> {
+  await page.evaluate(() => Promise.allSettled(document.getAnimations().map((animation) => animation.finished)));
+}
+
 /**
  * Clicks the middle of an element like a user would: whatever is on top at that
  * point gets the click. Unlike `locator.click()`, it does not wait for an
@@ -48,7 +53,7 @@ export function dialog(page: Page, title: string): Locator {
  */
 export async function clickWhereShown(page: Page, locator: Locator): Promise<void> {
   // A user cannot click within the few milliseconds of an enter animation; under load a test can.
-  await page.evaluate(() => Promise.allSettled(document.getAnimations().map((animation) => animation.finished)));
+  await settle(page);
   const box = await locator.boundingBox();
   if (!box) throw new Error("The element is not rendered.");
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);

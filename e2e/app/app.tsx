@@ -36,6 +36,7 @@ export function App() {
   const sessionExpired = useIntent("session-expired");
   const billing = useIntent("billing");
   const introVideo = useIntent("intro-video");
+  const saveFilter = useIntent("save-filter");
 
   return (
     <modals.ModalProvider store={store}>
@@ -73,6 +74,13 @@ export function App() {
               Search
               <input />
             </label>
+            {/* No name: a dialog inside the drawer joins its flow. */}
+            <Dialog {...saveFilter} title="Save filter" trigger="Save filter">
+              <label>
+                Filter name
+                <input />
+              </label>
+            </Dialog>
           </Drawer>
           <button type="button" onClick={() => setPageClicks((count) => count + 1)}>
             Page button

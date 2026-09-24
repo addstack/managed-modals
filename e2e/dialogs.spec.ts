@@ -11,6 +11,7 @@ import {
   openFixture,
   recordWhile,
   setOpen,
+  settle,
 } from "./fixture.js";
 
 // Real-browser focus, keyboard and pointer behaviour of managed dialogs, with
@@ -83,6 +84,7 @@ for (const [kit, content] of [
       await page.keyboard.press("Escape");
       await expectShown(page, ["Edit user"]);
 
+      await settle(page);
       await page.keyboard.press("Escape");
       await expectShown(page, []);
       await expect(page.getByRole("button", { name: "Edit user" })).toBeFocused();
@@ -148,6 +150,8 @@ for (const [kit, content] of [
       await page.keyboard.press("Escape");
       await expectShown(page, ["Edit user", "Really delete?"]);
 
+      // keepMounted on Radix ignores Escape during a resumed dialog's enter animation (spec §13).
+      await settle(page);
       await page.keyboard.press("Escape");
       await expectShown(page, ["Edit user"]);
     });
@@ -164,6 +168,7 @@ for (const [kit, content] of [
       await page.keyboard.press("Escape");
       await expectShown(page, ["Edit user", "Discard changes?"]);
 
+      await settle(page);
       await page.keyboard.press("Escape");
       await expectShown(page, ["Edit user"]);
       expect(await appEvents(page)).toEqual([

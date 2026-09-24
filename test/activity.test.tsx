@@ -37,6 +37,8 @@ const hasActivity = "Activity" in React;
 
 const policies = {
   "session-expired": { priority: 100 },
+  "delete-confirm": { priority: 90 },
+  billing: { priority: 80 },
   "edit-user": { priority: 40 },
   filters: { priority: 30 },
   onboarding: { priority: 10 },
@@ -249,6 +251,283 @@ describe.runIf(hasActivity)("Radix", () => {
       </RadixDialog.Root>,
     );
     expect(visibleDialogs()).toEqual(["Plain"]);
+  });
+});
+
+describe.runIf(hasActivity)("nested modals while their flow is suspended", () => {
+  function Probe({ onState }: { onState: (state: ModalSchedulerState) => void }) {
+    const { useModalSchedulerState } = shared;
+    onState(useModalSchedulerState());
+    return null;
+  }
+  // One factory per test file run is enough; the provider owns the state.
+  const shared = setup();
+
+  function statuses(state: ModalSchedulerState): string[] {
+    return Object.values(state.requests)
+      .map((request) => `${request.name}${request.parentRequestId ? " (nested)" : ""}: ${request.status}`)
+      .sort();
+  }
+
+  test("stay registered, with the same requests, while the flow is hidden", async () => {
+    const { ModalProvider, Dialog } = shared;
+    let state!: ModalSchedulerState;
+    let setSession!: (open: boolean) => void;
+
+    function App() {
+      const [session, setSessionState] = useState(false);
+      setSession = setSessionState;
+      return (
+        <ModalProvider>
+          <Probe onState={(next) => (state = next)} />
+          <Dialog name="edit-user" defaultOpen>
+            <RadixContent title="Edit user">
+              <Dialog defaultOpen>
+                <RadixContent title="Really delete?" />
+              </Dialog>
+            </RadixContent>
+          </Dialog>
+          <Dialog name="session-expired" open={session} onOpenChange={setSessionState}>
+            <RadixContent title="Session expired" />
+          </Dialog>
+        </ModalProvider>
+      );
+    }
+
+    render(<App />);
+    const requestIds = Object.keys(state.requests).sort();
+    act(() => setSession(true));
+    expect(visibleDialogs()).toEqual(["Session expired"]);
+    expect(statuses(state)).toEqual([
+      "edit-user (nested): suspended",
+      "edit-user: suspended",
+      "session-expired: active",
+    ]);
+
+    act(() => setSession(false));
+    await waitFor(() => expect(visibleDialogs()).toEqual(["Edit user", "Really delete?"]));
+    expect(Object.keys(state.requests).sort()).toEqual(requestIds);
+  });
+
+  test("a nested modal's own higher priority still ranks its flow", async () => {
+    const { ModalProvider, Dialog } = shared;
+    let setSession!: (open: boolean) => void;
+    let setBilling!: (open: boolean) => void;
+
+    function App() {
+      const [session, setSessionState] = useState(false);
+      const [billing, setBillingState] = useState(false);
+      setSession = setSessionState;
+      setBilling = setBillingState;
+      return (
+        <ModalProvider>
+          <Dialog name="edit-user" defaultOpen>
+            <RadixContent title="Edit user">
+              <Dialog name="delete-confirm" defaultOpen>
+                <RadixContent title="Really delete?" />
+              </Dialog>
+            </RadixContent>
+          </Dialog>
+          <Dialog name="session-expired" open={session} onOpenChange={setSessionState}>
+            <RadixContent title="Session expired" />
+          </Dialog>
+          <Dialog name="billing" open={billing} onOpenChange={setBillingState}>
+            <RadixContent title="Billing" />
+          </Dialog>
+        </ModalProvider>
+      );
+    }
+
+    render(<App />);
+    act(() => setSession(true));
+    // Billing (80) waits: the suspended flow ranks at its nested modal's 90.
+    act(() => setBilling(true));
+    expect(visibleDialogs()).toEqual(["Session expired"]);
+
+    act(() => setSession(false));
+    await waitFor(() => expect(visibleDialogs()).toEqual(["Edit user", "Really delete?"]));
+  });
+
+  test("a nested modal removed while its flow is hidden is dropped when the flow comes back", async () => {
+    const { ModalProvider, Dialog } = shared;
+    let state!: ModalSchedulerState;
+    let setSession!: (open: boolean) => void;
+    let setNested!: (shown: boolean) => void;
+    let setEdit!: (open: boolean) => void;
+
+    function App() {
+      const [session, setSessionState] = useState(false);
+      const [nested, setNestedState] = useState(true);
+      const [edit, setEditState] = useState(true);
+      setSession = setSessionState;
+      setNested = setNestedState;
+      setEdit = setEditState;
+      return (
+        <ModalProvider>
+          <Probe onState={(next) => (state = next)} />
+          <Dialog name="edit-user" open={edit} onOpenChange={setEditState}>
+            <RadixContent title="Edit user">
+              {nested && (
+                <Dialog defaultOpen>
+                  <RadixContent title="Really delete?" />
+                </Dialog>
+              )}
+            </RadixContent>
+          </Dialog>
+          <Dialog name="session-expired" open={session} onOpenChange={setSessionState}>
+            <RadixContent title="Session expired" />
+          </Dialog>
+          <Dialog name="onboarding" defaultOpen>
+            <RadixContent title="Onboarding" />
+          </Dialog>
+        </ModalProvider>
+      );
+    }
+
+    render(<App />);
+    act(() => setSession(true));
+    act(() => setNested(false));
+    act(() => setSession(false));
+    await waitFor(() => expect(visibleDialogs()).toEqual(["Edit user"]));
+    expect(statuses(state)).toEqual(["edit-user: active", "onboarding: pending"]);
+
+    act(() => setEdit(false));
+    await waitFor(() => expect(visibleDialogs()).toEqual(["Onboarding"]));
+  });
+
+  test("a nested modal the application closes while its flow is hidden does not come back", async () => {
+    const { ModalProvider, Dialog } = shared;
+    let state!: ModalSchedulerState;
+    let setSession!: (open: boolean) => void;
+    let setConfirm!: (open: boolean) => void;
+
+    function App() {
+      const [session, setSessionState] = useState(false);
+      const [confirm, setConfirmState] = useState(true);
+      setSession = setSessionState;
+      setConfirm = setConfirmState;
+      return (
+        <ModalProvider>
+          <Probe onState={(next) => (state = next)} />
+          <Dialog name="edit-user" defaultOpen>
+            <RadixContent title="Edit user">
+              <Dialog open={confirm} onOpenChange={setConfirmState}>
+                <RadixContent title="Really delete?" />
+              </Dialog>
+            </RadixContent>
+          </Dialog>
+          <Dialog name="session-expired" open={session} onOpenChange={setSessionState}>
+            <RadixContent title="Session expired" />
+          </Dialog>
+        </ModalProvider>
+      );
+    }
+
+    render(<App />);
+    act(() => setSession(true));
+    act(() => setConfirm(false));
+    act(() => setSession(false));
+    await waitFor(() => expect(visibleDialogs()).toEqual(["Edit user"]));
+    expect(statuses(state)).toEqual(["edit-user: active"]);
+  });
+
+  test("a dialog inside a drawer comes back on top of it, with its state, and Escape closes it first", async () => {
+    const { ModalProvider, Dialog, Drawer } = shared;
+    let setSession!: (open: boolean) => void;
+
+    function App() {
+      const [session, setSessionState] = useState(false);
+      setSession = setSessionState;
+      return (
+        <ModalProvider>
+          <Drawer name="filters" defaultOpen>
+            <VaulContent title="Filters">
+              <Dialog defaultOpen>
+                <RadixContent title="Save filter">
+                  <input aria-label="Filter name" />
+                </RadixContent>
+              </Dialog>
+            </VaulContent>
+          </Drawer>
+          <Dialog name="session-expired" open={session} onOpenChange={setSessionState}>
+            <RadixContent title="Session expired" />
+          </Dialog>
+        </ModalProvider>
+      );
+    }
+
+    render(<App />);
+    expect(visibleDialogs()).toEqual(["Filters", "Save filter"]);
+    fireEvent.change(screen.getByLabelText("Filter name"), { target: { value: "Red" } });
+
+    act(() => setSession(true));
+    expect(visibleDialogs()).toEqual(["Session expired"]);
+    act(() => setSession(false));
+    await waitFor(() => expect(visibleDialogs()).toEqual(["Filters", "Save filter"]));
+    expect(screen.getByLabelText<HTMLInputElement>("Filter name").value).toBe("Red");
+
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "Save filter" }).contains(document.activeElement)).toBe(true));
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    await waitFor(() => expect(visibleDialogs()).toEqual(["Filters"]));
+  });
+
+  test("three levels (a confirm in a dialog in a drawer) come back whole; one removed while hidden is dropped", async () => {
+    const { ModalProvider, Dialog, Drawer } = shared;
+    let state!: ModalSchedulerState;
+    let setSession!: (open: boolean) => void;
+    let setConfirm!: (shown: boolean) => void;
+
+    function App() {
+      const [session, setSessionState] = useState(false);
+      const [confirm, setConfirmState] = useState(true);
+      setSession = setSessionState;
+      setConfirm = setConfirmState;
+      return (
+        <ModalProvider>
+          <Probe onState={(next) => (state = next)} />
+          <Drawer name="filters" defaultOpen>
+            <VaulContent title="Filters">
+              <Dialog defaultOpen>
+                <RadixContent title="Save filter">
+                  <input aria-label="Filter name" />
+                  {confirm && (
+                    <Dialog defaultOpen>
+                      <RadixContent title="Overwrite?" />
+                    </Dialog>
+                  )}
+                </RadixContent>
+              </Dialog>
+            </VaulContent>
+          </Drawer>
+          <Dialog name="session-expired" open={session} onOpenChange={setSessionState}>
+            <RadixContent title="Session expired" />
+          </Dialog>
+        </ModalProvider>
+      );
+    }
+
+    render(<App />);
+    expect(visibleDialogs()).toEqual(["Filters", "Save filter", "Overwrite?"]);
+    fireEvent.change(screen.getByLabelText("Filter name"), { target: { value: "Red" } });
+
+    act(() => setSession(true));
+    expect(visibleDialogs()).toEqual(["Session expired"]);
+    expect(statuses(state)).toEqual([
+      "filters (nested): suspended",
+      "filters (nested): suspended",
+      "filters: suspended",
+      "session-expired: active",
+    ]);
+    act(() => setSession(false));
+    await waitFor(() => expect(visibleDialogs()).toEqual(["Filters", "Save filter", "Overwrite?"]));
+    expect(screen.getByLabelText<HTMLInputElement>("Filter name").value).toBe("Red");
+
+    act(() => setSession(true));
+    act(() => setConfirm(false));
+    act(() => setSession(false));
+    await waitFor(() => expect(visibleDialogs()).toEqual(["Filters", "Save filter"]));
+    expect(screen.getByLabelText<HTMLInputElement>("Filter name").value).toBe("Red");
+    expect(statuses(state)).toEqual(["filters (nested): active", "filters: covered"]);
   });
 });
 

@@ -38,6 +38,20 @@ export const ManagedModalContext = createContext<ManagedModalContextValue | null
 export type ActivityState = "visible" | "hidden" | "revealing";
 export const ActivityStateContext = createContext<ActivityState>("visible");
 
+/**
+ * Provided by `<ModalActivity>` to its content: keeps the requests of managed
+ * modals nested in it registered while the boundary hides them.
+ */
+export type NestedRequests = {
+  /** Whether the boundary hides its content now, because its modal is suspended. */
+  hiding(): boolean;
+  /** A nested modal hidden by the boundary hands its request over. */
+  adopt(requestId: string): void;
+  /** A nested modal that is back takes its request over again. */
+  reclaim(requestId: string): void;
+};
+export const NestedRequestsContext = createContext<NestedRequests | null>(null);
+
 /** The nearest managed modal, or `null` when rendered outside of one. */
 export function useManagedModalContext(): ManagedModalContextValue | null {
   return useContext(ManagedModalContext);

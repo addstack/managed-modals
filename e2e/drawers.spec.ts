@@ -78,3 +78,42 @@ for (const [drawer, content] of [
     });
   });
 }
+
+// A dialog inside a drawer, with primitives from one family, as a shadcn/ui
+// project has them: Radix dialogs with the vaul drawer, or Base UI for both.
+for (const [kit, drawer] of [
+  ["radix", "vaul"],
+  ["base-ui", "base-ui"],
+] as const) {
+  for (const content of ["activity", "keep-mounted"] as const) {
+    test(`${drawer} drawer with a ${kit} dialog inside, ${content}: the pair is preempted and comes back whole`, async ({
+      page,
+    }) => {
+      test.fixme(
+        drawer === "vaul" && content === "keep-mounted",
+        "vaul has no way to keep a closed drawer mounted; <ModalActivity> keeps it (spec §13).",
+      );
+      await openFixture(page, { kit, drawer, content });
+      await page.getByRole("button", { name: "Open filters" }).click();
+      await expectShown(page, ["Filters"]);
+      await page.getByLabel("Search").fill("red shoes");
+      await dialog(page, "Filters").getByRole("button", { name: "Save filter" }).click();
+      await expectShown(page, ["Filters", "Save filter"]);
+      await page.getByLabel("Filter name").fill("Red");
+
+      await setOpen(page, "session-expired", true);
+      await expectShown(page, ["Session expired"]);
+      // Both stay known to the scheduler while hidden.
+      expect(await page.evaluate(() => window.e2e.debug().length)).toBe(3);
+
+      await page.keyboard.press("Escape");
+      await expectShown(page, ["Filters", "Save filter"]);
+      await expect(page.getByLabel("Filter name")).toHaveValue("Red");
+      await expect(page.getByLabel("Search")).toHaveValue("red shoes");
+      await expect(page.getByRole("dialog", { name: "Save filter" })).toBeVisible();
+
+      await page.keyboard.press("Escape");
+      await expectShown(page, ["Filters"]);
+    });
+  }
+}

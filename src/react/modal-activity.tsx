@@ -4,7 +4,14 @@ import * as React from "react";
 import { useContext, useId, useRef, useState, type ReactNode } from "react";
 
 import { isDescendantOf } from "../core/index.js";
-import { ActivityStateContext, ManagedModalContext, ModalStoreContext, type ActivityState } from "./context.js";
+import {
+  ActivityStateContext,
+  ManagedModalContext,
+  ModalStoreContext,
+  NestedRequestsContext,
+  type ActivityState,
+  type NestedRequests,
+} from "./context.js";
 import { useIsomorphicLayoutEffect } from "./use-managed-modal.js";
 
 type ActivityComponent = React.ComponentType<{ mode: "visible" | "hidden"; children?: ReactNode }>;
@@ -73,6 +80,36 @@ export function ModalActivity({ children }: { children?: ReactNode }) {
     hiddenPortalsRef.current = [];
   }, [revealing]);
 
+  // Nested modals keep their requests while hidden with this modal's flow.
+  // When the content is back, those that did not take theirs over again were
+  // removed or closed while hidden: their requests are dropped, so that
+  // nothing that is gone stays in the queue.
+  const requestIdRef = useRef(requestId);
+  const [nested] = useState(() => {
+    const adopted = new Set<string>();
+    const registry: NestedRequests = {
+      hiding: () => {
+        const own = requestIdRef.current;
+        return own !== null && store !== null && store.getPresentation(own).status === "suspended";
+      },
+      adopt: (nestedRequestId) => adopted.add(nestedRequestId),
+      reclaim: (nestedRequestId) => adopted.delete(nestedRequestId),
+    };
+    const dropUnclaimed = () => {
+      for (const nestedRequestId of adopted) store?.cancel(nestedRequestId);
+      adopted.clear();
+    };
+    return { registry, dropUnclaimed };
+  });
+  useIsomorphicLayoutEffect(() => {
+    requestIdRef.current = requestId;
+  });
+  // Runs after the effects of the revealed content, where nested modals take their requests back.
+  useIsomorphicLayoutEffect(() => {
+    if (revealing) nested.dropUnclaimed();
+  }, [revealing, nested]);
+  useIsomorphicLayoutEffect(() => nested.dropUnclaimed, [nested]);
+
   useIsomorphicLayoutEffect(() => (enabled && register ? register(id) : undefined), [enabled, register, id]);
 
   useIsomorphicLayoutEffect(() => {
@@ -92,7 +129,9 @@ export function ModalActivity({ children }: { children?: ReactNode }) {
     hidden || parentState === "hidden" ? "hidden" : revealing || parentState === "revealing" ? "revealing" : "visible";
   return (
     <Activity mode={hidden ? "hidden" : "visible"}>
-      <ActivityStateContext.Provider value={state}>{children}</ActivityStateContext.Provider>
+      <ActivityStateContext.Provider value={state}>
+        <NestedRequestsContext.Provider value={nested.registry}>{children}</NestedRequestsContext.Provider>
+      </ActivityStateContext.Provider>
     </Activity>
   );
 }

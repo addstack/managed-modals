@@ -187,7 +187,7 @@ When a modal is preempted, its content has to stay alive to keep form state, scr
  }
 ```
 
-The same line works in `alert-dialog.tsx`, `sheet.tsx` and `drawer.tsx`, on Radix, Base UI and vaul. While the modal is suspended, React's [`<Activity>`](https://react.dev/reference/react/Activity) hides the content and cleans up its effects (focus trap, scroll lock, `aria-hidden` on the page) but keeps its state and DOM. When the modal comes back, it is shown again as it was, with focus on its first field, as when it opens. Outside a managed modal, `<ModalActivity>` renders its children as they are.
+The same line works in `alert-dialog.tsx`, `sheet.tsx` and `drawer.tsx`, on Radix, Base UI and vaul. Nested modals, such as a dialog inside a drawer, are hidden and brought back with their flow, and stay known to the scheduler meanwhile. While the modal is suspended, React's [`<Activity>`](https://react.dev/reference/react/Activity) hides the content and cleans up its effects (focus trap, scroll lock, `aria-hidden` on the page) but keeps its state and DOM. When the modal comes back, it is shown again as it was, with focus on its first field, as when it opens. Outside a managed modal, `<ModalActivity>` renders its children as they are.
 
 It also hides the content of a modal that is waiting in the queue. Content that renders while its root is closed therefore waits its turn too: Radix `forceMount`, Base UI `keepMounted`, or an animation library such as Motion driven by your own `open` state.
 

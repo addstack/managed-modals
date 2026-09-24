@@ -19,7 +19,13 @@ import {
   type ModalPolicyOverrides,
   type ModalPresentation,
 } from "../core/index.js";
-import { ActivityStateContext, ManagedModalContext, useModalStore, type ManagedModalContextValue } from "./context.js";
+import {
+  ActivityStateContext,
+  ManagedModalContext,
+  NestedRequestsContext,
+  useModalStore,
+  type ManagedModalContextValue,
+} from "./context.js";
 import { restoreScrollPositions } from "./scroll-positions.js";
 
 export const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
@@ -120,6 +126,12 @@ export function useManagedModal<Name extends string = string>(
   }, [closingSuspended]);
   const presentation = closingSuspended ? CLOSING_SUSPENDED : storePresentation;
 
+  // Set inside a parent's <ModalActivity>. React cleans up the effects of
+  // content an <Activity> hides as if it unmounted; while the boundary hides
+  // this modal with its suspended flow, the request is handed to the boundary
+  // instead of cancelled, and taken back when the content is revealed.
+  const nested = useContext(NestedRequestsContext);
+
   useIsomorphicLayoutEffect(() => {
     if (!requestId) return;
     lastRequestIdRef.current = requestId;
@@ -132,8 +144,12 @@ export function useManagedModal<Name extends string = string>(
       parentRequestId,
       overrides: { ...policy, priority },
     });
-    return () => store.cancel(requestId);
-  }, [store, requestId, instanceId, kind, parentRequestId]);
+    nested?.reclaim(requestId);
+    return () => {
+      if (nested?.hiding()) nested.adopt(requestId);
+      else store.cancel(requestId);
+    };
+  }, [store, requestId, instanceId, kind, parentRequestId, nested]);
 
   useIsomorphicLayoutEffect(() => {
     if (requestId) store.updatePriority(requestId, options.priority);
