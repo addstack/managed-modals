@@ -1,3 +1,4 @@
+import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import { useLayoutEffect, useState } from "react";
 
 import type { ModalDismissReason } from "../../src/core/index.js";
@@ -36,6 +37,8 @@ export function App() {
   const sessionExpired = useIntent("session-expired");
   const billing = useIntent("billing");
   const introVideo = useIntent("intro-video");
+  // Base UI: a trigger for "Edit user" rendered away from its root.
+  const [editUserHandle] = useState(() => BaseDialog.createHandle<unknown>());
   const saveFilter = useIntent("save-filter");
 
   return (
@@ -46,7 +49,13 @@ export function App() {
           Dialogs: {options.kit}. Drawers: {options.drawer}. Content: {options.content}.
         </p>
         <div className="toolbar">
-          <Dialog name="edit-user" {...editUser} title="Edit user" trigger="Edit user">
+          <Dialog
+            name="edit-user"
+            {...editUser}
+            {...(options.kit === "base-ui" ? { handle: editUserHandle } : {})}
+            title="Edit user"
+            trigger="Edit user"
+          >
             <label>
               Name
               <input />
@@ -82,6 +91,9 @@ export function App() {
               </label>
             </Dialog>
           </Drawer>
+          {options.kit === "base-ui" && (
+            <BaseDialog.Trigger handle={editUserHandle}>Open user editor</BaseDialog.Trigger>
+          )}
           <button type="button" onClick={() => setPageClicks((count) => count + 1)}>
             Page button
           </button>

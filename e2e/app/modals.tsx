@@ -46,6 +46,8 @@ export type ModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDismiss: (reason: ModalDismissReason) => void;
+  /** Base UI only: associates detached `Dialog.Trigger`s rendered elsewhere. */
+  handle?: BaseDialog.Handle<unknown>;
   children?: ReactNode;
 };
 
@@ -55,7 +57,7 @@ type ContentProps = { title: string; children?: ReactNode };
 
 const RadixRoot = modals.managed(RadixDialog.Root, { kind: "dialog", adapter: adapters.radix });
 
-export function RadixModal({ title, trigger, children, ...root }: ModalProps) {
+export function RadixModal({ title, trigger, children, handle: _handle, ...root }: ModalProps) {
   return (
     <RadixRoot {...root}>
       {trigger !== undefined && <RadixDialog.Trigger>{trigger}</RadixDialog.Trigger>}
@@ -169,7 +171,7 @@ const VaulRoot = modals.managed(VaulDrawer.Root, { kind: "drawer", adapter: adap
  * shadcn/ui `Drawer` (vaul). With `<ModalActivity>` a suspended drawer keeps
  * its state; without it (the `keepMounted` setup) vaul has no way to keep it.
  */
-export function VaulModal({ title, trigger, children, ...root }: ModalProps) {
+export function VaulModal({ title, trigger, children, handle: _handle, ...root }: ModalProps) {
   const portal = (
     <VaulDrawer.Portal>
       <VaulDrawer.Overlay className="drawer-overlay" />
@@ -195,7 +197,7 @@ const BaseDrawerRoot = modals.managed(
   { kind: "drawer", adapter: adapters.baseUi },
 );
 
-export function BaseDrawerModal({ title, trigger, children, ...root }: ModalProps) {
+export function BaseDrawerModal({ title, trigger, children, handle: _handle, ...root }: ModalProps) {
   return (
     <BaseDrawerRoot {...root}>
       {trigger !== undefined && <BaseDrawer.Trigger>{trigger}</BaseDrawer.Trigger>}

@@ -267,3 +267,28 @@ for (const [kit, content] of [
     });
   });
 }
+
+test.describe("Base UI detached trigger", () => {
+  for (const content of ["activity", "keep-mounted"] as const) {
+    test(`${content}: a trigger outside the root opens the managed dialog; after a preemption, closing returns focus to it`, async ({
+      page,
+    }) => {
+      await openFixture(page, { kit: "base-ui", content });
+      await page.getByRole("button", { name: "Open user editor" }).click();
+      await expectShown(page, ["Edit user"]);
+      await page.getByLabel("Name").fill("Ada");
+
+      await setOpen(page, "session-expired", true);
+      await expectShown(page, ["Session expired"]);
+      await page.keyboard.press("Escape");
+      await expectShown(page, ["Edit user"]);
+      await expect(page.getByLabel("Name")).toHaveValue("Ada");
+
+      await settle(page);
+      await page.keyboard.press("Escape");
+      await expectShown(page, []);
+      await expect(page.getByRole("button", { name: "Open user editor" })).toBeFocused();
+      await expectPageReleased(page);
+    });
+  }
+});
