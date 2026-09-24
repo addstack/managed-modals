@@ -16,7 +16,9 @@ async function queueOnboardingBehindBilling(page: Page): Promise<void> {
 test.describe("without awaitExit", () => {
   for (const kit of ["radix", "base-ui"] as const) {
     test(`${kit}: the next dialog enters while the previous one is still animating out`, async ({ page }) => {
-      await openFixture(page, { kit });
+      // A long exit animation: the overlap must not depend on how fast a slow
+      // (software-rendered, loaded) browser gets the next dialog on screen.
+      await openFixture(page, { kit, durationMs: 1500 });
       await queueOnboardingBehindBilling(page);
 
       const recording = await recordWhile(
