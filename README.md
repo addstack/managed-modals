@@ -26,7 +26,7 @@
 
 <p align="center">
   <a href="https://addstack.github.io/managed-modals/">
-    <img src="https://raw.githubusercontent.com/addstack/managed-modals/main/assets/demo.gif" alt="A session-expired dialog takes over an edit form; after signing in the form comes back as it was, then a queued dialog opens" width="100%">
+    <img src="https://raw.githubusercontent.com/addstack/managed-modals/main/assets/without-vs-with.gif" alt="The same app twice. Without managed-modals, three modals open at once and stack over an edit form. With it, only the session-expired dialog shows, the others wait, and after signing in the form comes back as it was, then the queue moves on" width="640">
   </a>
 </p>
 
